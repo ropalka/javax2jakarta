@@ -21,9 +21,15 @@
  */
 package org.wildfly.javax2jakarta;
 
+import static java.lang.Thread.currentThread;
+
 import java.nio.ByteBuffer;
+import java.util.ConcurrentModificationException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
+ // TODO: javadoc
  * <a href="mailto:ropalka@redhat.com">Richard Opálka</a>
  */
 public final class Transformer {
@@ -45,6 +51,12 @@ public final class Transformer {
     private static final byte INVOKE_DYNAMIC = 18;
     private static final byte MODULE = 19;
     private static final byte PACKAGE = 20;
+
+    private final Map<String, String> mapping;
+
+    private Transformer(final Map<String, String> mapping) {
+        this.mapping = mapping;
+    }
 
     public byte[] transform(final byte[] clazz) {
         final ByteBuffer classBB = ByteBuffer.wrap(clazz);
@@ -71,5 +83,40 @@ public final class Transformer {
             }
         }
         throw new UnsupportedOperationException(); // TODO: implement
+    }
+
+    public static Transformer.Builder newInstance() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+        private final Thread thread;
+        private final Map<String, String> mapping;
+        private boolean built;
+
+        private Builder() {
+            thread = currentThread();
+            mapping = new ConcurrentHashMap<>();
+        }
+
+        public void addMapping(final String from, final String to) {
+            // preconditions
+            if (thread != currentThread()) throw new ConcurrentModificationException();
+            if (built) throw new IllegalStateException();
+            // implementation
+            for (String key : mapping.keySet()) {
+                if (key.contains(from)) return;
+            }
+            mapping.put(from, to);
+        }
+
+        public Transformer build() {
+            // preconditions
+            if (thread != currentThread()) throw new ConcurrentModificationException();
+            if (built) throw new IllegalStateException();
+            // implementation
+            built = true;
+            return new Transformer(mapping);
+        }
     }
 }
