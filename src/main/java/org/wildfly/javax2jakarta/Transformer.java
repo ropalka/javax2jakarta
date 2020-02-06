@@ -63,9 +63,11 @@ public final class Transformer {
         classBB.position(8);
         final int poolSize = classBB.getShort();
         byte tag;
+        String s;
         for (int i = 1; i < poolSize; i++) {
             tag = classBB.get();
             if (tag == UTF8) {
+                s = readUTF8(classBB);
                 // TODO: implement javax -> jakarta transformation
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
                 classBB.position(classBB.position() + 2);
@@ -83,6 +85,28 @@ public final class Transformer {
             }
         }
         throw new UnsupportedOperationException(); // TODO: implement
+    }
+
+    private String readUTF8(final ByteBuffer classBB) {
+        final int byteArrayLength = (classBB.get() & 0xFF) << 8 | (classBB.get() & 0xFF);
+        final char[] charBuffer = new char[byteArrayLength];
+        int charArrayLength = 0;
+        int processedBytes = 0;
+        int currentByte;
+        while (processedBytes < byteArrayLength) {
+            currentByte = classBB.get();
+            if ((currentByte & 0x80) == 0) {
+                charBuffer[charArrayLength++] = (char) (currentByte & 0x7F);
+                processedBytes += 1;
+            } else if ((currentByte & 0xE0) == 0xC0) {
+                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (classBB.get() & 0x3F));
+                processedBytes += 2;
+            } else {
+                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((classBB.get() & 0x3F) << 6) + (classBB.get() & 0x3F));
+                processedBytes += 3;
+            }
+        }
+        return new String(charBuffer, 0, charArrayLength);
     }
 
     public static Transformer.Builder newInstance() {
