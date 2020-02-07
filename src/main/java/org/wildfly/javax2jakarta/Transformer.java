@@ -23,7 +23,6 @@ package org.wildfly.javax2jakarta;
 
 import static java.lang.Thread.currentThread;
 
-import java.nio.ByteBuffer;
 import java.util.ConcurrentModificationException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,28 +57,36 @@ public final class Transformer {
         this.mapping = mapping;
     }
 
-    public byte[] transform(final byte[] clazz) {
-        final ByteBuffer classBB = ByteBuffer.wrap(clazz);
-        classBB.position(8);
-        final int poolSize = classBB.getShort();
+    public byte[] transform(final byte[] classBuffer) {
+        int position = 8; // skip magic
+        final int poolSize = readUnsignedShort(classBuffer, position);;
         byte tag;
+        int byteArrayLength;
         String s;
+        boolean transformClass;
         for (int i = 1; i < poolSize; i++) {
-            tag = classBB.get();
+            tag = classBuffer[position++];
             if (tag == UTF8) {
-                s = readUTF8(classBB);
+                byteArrayLength = readUnsignedShort(classBuffer, position);
+                position += 2;
+                s = readUTF8(classBuffer, byteArrayLength, position);
+                position += byteArrayLength;
+                // TODO: it is possible to detect exact byte[] array value for transformed class
+                // algorithm: for every mapping compute difference
+                //            process whole contant pool and at the end you will have computed value
+                // TODO: it is not necessary to transform UTF8 to string above - translate mapping to JVM modified UTF8 instead
                 // TODO: implement javax -> jakarta transformation
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
-                classBB.position(classBB.position() + 2);
+                position += 2;
             } else if (tag == LONG || tag == DOUBLE) {
-                classBB.position(classBB.position() + 8);
+                position += 8;
                 i++; // see JVM specification
             } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF
             || tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE
             || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
-                classBB.position(classBB.position() + 4);
+                position += 4;
             } else if (tag == METHOD_HANDLE) {
-                classBB.position(classBB.position() + 3);
+                position += 3;
             } else {
                 throw new UnsupportedClassVersionError();
             }
@@ -87,23 +94,23 @@ public final class Transformer {
         throw new UnsupportedOperationException(); // TODO: implement
     }
 
-    private String readUTF8(final ByteBuffer classBB) {
-        final int byteArrayLength = (classBB.get() & 0xFF) << 8 | (classBB.get() & 0xFF);
+    private int readUnsignedShort(final byte[] classBuffer, final int position) {
+        return ((classBuffer[position] & 0xFF) << 8) | (classBuffer[position + 1] & 0xFF);
+    }
+
+    private String readUTF8(final byte[] classBuffer, final int byteArrayLength, final int position) {
         final char[] charBuffer = new char[byteArrayLength];
         int charArrayLength = 0;
         int processedBytes = 0;
         int currentByte;
         while (processedBytes < byteArrayLength) {
-            currentByte = classBB.get();
+            currentByte = classBuffer[processedBytes++];
             if ((currentByte & 0x80) == 0) {
                 charBuffer[charArrayLength++] = (char) (currentByte & 0x7F);
-                processedBytes += 1;
             } else if ((currentByte & 0xE0) == 0xC0) {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (classBB.get() & 0x3F));
-                processedBytes += 2;
+                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (classBuffer[position + processedBytes++] & 0x3F));
             } else {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((classBB.get() & 0x3F) << 6) + (classBB.get() & 0x3F));
-                processedBytes += 3;
+                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((classBuffer[position + processedBytes++] & 0x3F) << 6) + (classBuffer[position + processedBytes++] & 0x3F));
             }
         }
         return new String(charBuffer, 0, charArrayLength);
