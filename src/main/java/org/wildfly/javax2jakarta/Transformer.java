@@ -116,6 +116,42 @@ public final class Transformer {
         return new String(charBuffer, 0, charArrayLength);
     }
 
+    private byte[] writeUTF8(final String data) {
+        final byte[] retVal = new byte[getByteArraySize(data)];
+        int bytesCount = 0;
+        int currentChar;
+
+        for (int i = 0; i < data.length(); i++) {
+            currentChar = data.charAt(i);
+            if (currentChar < 0x80 && currentChar != 0) {
+                retVal[bytesCount++] = (byte) currentChar;
+            } else if (currentChar >= 0x800) {
+                retVal[bytesCount++] = (byte) (0xE0 | ((currentChar >> 12) & 0x0F));
+                retVal[bytesCount++] = (byte) (0x80 | ((currentChar >> 6) & 0x3F));
+                retVal[bytesCount++] = (byte) (0x80 | ((currentChar >> 0) & 0x3F));
+            } else {
+                retVal[bytesCount++] = (byte) (0xC0 | ((currentChar >> 6) & 0x1F));
+                retVal[bytesCount++] = (byte) (0x80 | ((currentChar >> 0) & 0x3F));
+            }
+        }
+
+        return retVal;
+    }
+
+    private int getByteArraySize(final String data) {
+        int retVal = data.length();
+        int currentChar;
+
+        for (int i = 0; i < data.length(); i++) {
+            currentChar = data.charAt(i);
+            if (currentChar >= 0x80 || currentChar == 0) {
+                retVal += (currentChar >= 0x800) ? 2 : 1;
+            }
+        }
+
+        return retVal;
+    }
+
     public static Transformer.Builder newInstance() {
         return new Builder();
     }
@@ -134,6 +170,8 @@ public final class Transformer {
             // preconditions
             if (thread != currentThread()) throw new ConcurrentModificationException();
             if (built) throw new IllegalStateException();
+            if (from == null || to == null) throw new NullPointerException();
+            if (from.length() == 0 || to.length() == 0) throw new IllegalArgumentException();
             // implementation
             for (String key : mapping.keySet()) {
                 if (key.contains(from)) return;
