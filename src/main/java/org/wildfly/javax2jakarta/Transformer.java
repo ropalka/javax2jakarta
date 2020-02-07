@@ -24,8 +24,8 @@ package org.wildfly.javax2jakarta;
 import static java.lang.Thread.currentThread;
 
 import java.util.ConcurrentModificationException;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  // TODO: javadoc
@@ -51,10 +51,12 @@ public final class Transformer {
     private static final byte MODULE = 19;
     private static final byte PACKAGE = 20;
 
-    private final Map<String, String> mapping;
+    private final byte[][] mappingFrom;
+    private final byte[][] mappingTo;
 
-    private Transformer(final Map<String, String> mapping) {
-        this.mapping = mapping;
+    private Transformer(final byte[][] mappingFrom, final byte[][] mappingTo) {
+        this.mappingFrom = mappingFrom;
+        this.mappingTo = mappingTo;
     }
 
     public byte[] transform(final byte[] classBuffer) {
@@ -72,8 +74,8 @@ public final class Transformer {
                 s = readUTF8(classBuffer, byteArrayLength, position);
                 position += byteArrayLength;
                 // TODO: it is possible to detect exact byte[] array value for transformed class
-                // algorithm: for every mapping compute difference
-                //            process whole contant pool and at the end you will have computed value
+                // TODO: algorithm: for every mapping compute difference
+                //                  process whole contant pool and at the end you will have computed value
                 // TODO: it is not necessary to transform UTF8 to string above - translate mapping to JVM modified UTF8 instead
                 // TODO: implement javax -> jakarta transformation
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
@@ -98,7 +100,7 @@ public final class Transformer {
         return ((classBuffer[position] & 0xFF) << 8) | (classBuffer[position + 1] & 0xFF);
     }
 
-    private String readUTF8(final byte[] classBuffer, final int byteArrayLength, final int position) {
+    private static String readUTF8(final byte[] classBuffer, final int byteArrayLength, final int position) {
         final char[] charBuffer = new char[byteArrayLength];
         int charArrayLength = 0;
         int processedBytes = 0;
@@ -116,7 +118,7 @@ public final class Transformer {
         return new String(charBuffer, 0, charArrayLength);
     }
 
-    private byte[] writeUTF8(final String data) {
+    private static byte[] writeUTF8(final String data) {
         final byte[] retVal = new byte[getByteArraySize(data)];
         int bytesCount = 0;
         int currentChar;
@@ -138,7 +140,7 @@ public final class Transformer {
         return retVal;
     }
 
-    private int getByteArraySize(final String data) {
+    private static int getByteArraySize(final String data) {
         int retVal = data.length();
         int currentChar;
 
@@ -163,18 +165,18 @@ public final class Transformer {
 
         private Builder() {
             thread = currentThread();
-            mapping = new ConcurrentHashMap<>();
+            mapping = new HashMap<>();
         }
 
         public void addMapping(final String from, final String to) {
             // preconditions
             if (thread != currentThread()) throw new ConcurrentModificationException();
             if (built) throw new IllegalStateException();
-            if (from == null || to == null) throw new NullPointerException();
+            if (from == null || to == null) throw new IllegalArgumentException();
             if (from.length() == 0 || to.length() == 0) throw new IllegalArgumentException();
             // implementation
             for (String key : mapping.keySet()) {
-                if (key.contains(from)) return;
+                if (key.contains(from) || from.contains(key)) throw new IllegalArgumentException();
             }
             mapping.put(from, to);
         }
@@ -183,9 +185,19 @@ public final class Transformer {
             // preconditions
             if (thread != currentThread()) throw new ConcurrentModificationException();
             if (built) throw new IllegalStateException();
+            if (mapping.size() == 0) throw new IllegalStateException();
             // implementation
             built = true;
-            return new Transformer(mapping);
+            final byte[][] mappingFrom = new byte[mapping.size()][];
+            final byte[][] mappingTo = new byte[mapping.size()][];
+            int i = 0;
+            for (Map.Entry<String, String> mappingEntry : mapping.entrySet()) {
+                mappingFrom[i] = writeUTF8(mappingEntry.getKey());
+                mappingTo[i] = writeUTF8(mappingEntry.getValue());
+                i++;
+            }
+            return new Transformer(mappingFrom, mappingTo);
         }
     }
+
 }
