@@ -98,6 +98,38 @@ public final class Transformer {
         throw new UnsupportedOperationException(); // TODO: implement
     }
 
+    private int[] findReplacementsInString(final byte[] clazzData, final int position, final int limit) {
+        int[] retVal = null;
+        int mappingIndex;
+        int replacementCount = 0;
+        int diffInBytes = 0;
+        for (int i = position; i < limit; i++) {
+            for (int j = 1; j < mappingFrom.length; j++) {
+                if (limit - i < mappingFrom[j].length) continue;
+                mappingIndex = j;
+                for (int k = 0; k < mappingFrom[j].length; k++) {
+                    if (clazzData[i + k] != mappingFrom[j][k]) {
+                        mappingIndex = 0;
+                        break;
+                    }
+                }
+                if (mappingIndex != 0) {
+                    if (retVal == null) {
+                        retVal = new int[((limit - position) / minimum) + 2];
+                        retVal[0] = position;
+                    }
+                    retVal[2 + replacementCount++] = mappingIndex << 16 | i - position;
+                    diffInBytes += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
+                    i += mappingFrom[j].length;
+                }
+            }
+        }
+        if (retVal != null) {
+            retVal[1] = diffInBytes;
+        }
+        return retVal;
+    }
+
     private int readUnsignedShort(final byte[] classBuffer, final int position) {
         return ((classBuffer[position] & 0xFF) << 8) | (classBuffer[position + 1] & 0xFF);
     }
