@@ -21,11 +21,11 @@
  */
 package org.wildfly.javax2jakarta;
 
-import static java.lang.Thread.currentThread;
-
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.Map;
+
+import static java.lang.Thread.currentThread;
 
 /**
  // TODO: javadoc
@@ -53,10 +53,12 @@ public final class Transformer {
 
     private final byte[][] mappingFrom;
     private final byte[][] mappingTo;
+    private final int minimum;
 
-    private Transformer(final byte[][] mappingFrom, final byte[][] mappingTo) {
+    private Transformer(final byte[][] mappingFrom, final byte[][] mappingTo, final int minimum) {
         this.mappingFrom = mappingFrom;
         this.mappingTo = mappingTo;
+        this.minimum = minimum;
     }
 
     public byte[] transform(final byte[] classBuffer) {
@@ -191,12 +193,16 @@ public final class Transformer {
             final byte[][] mappingFrom = new byte[mapping.size()][];
             final byte[][] mappingTo = new byte[mapping.size()][];
             int i = 0;
+            int minimum = Integer.MAX_VALUE;
             for (Map.Entry<String, String> mappingEntry : mapping.entrySet()) {
                 mappingFrom[i] = writeUTF8(mappingEntry.getKey());
                 mappingTo[i] = writeUTF8(mappingEntry.getValue());
+                if (minimum > mappingFrom[i].length) {
+                    minimum = mappingFrom[i].length;
+                }
                 i++;
             }
-            return new Transformer(mappingFrom, mappingTo);
+            return new Transformer(mappingFrom, mappingTo, minimum);
         }
     }
 
