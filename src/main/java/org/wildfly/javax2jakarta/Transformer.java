@@ -222,9 +222,10 @@ public final class Transformer {
             if (mapping.size() == 0) throw new IllegalStateException();
             // implementation
             built = true;
-            final byte[][] mappingFrom = new byte[mapping.size()][];
-            final byte[][] mappingTo = new byte[mapping.size()][];
-            int i = 0;
+            final int mappingSize = mapping.size() + 1;
+            final byte[][] mappingFrom = new byte[mappingSize][];
+            final byte[][] mappingTo = new byte[mappingSize][];
+            int i = 1;
             int minimum = Integer.MAX_VALUE;
             for (Map.Entry<String, String> mappingEntry : mapping.entrySet()) {
                 mappingFrom[i] = writeUTF8(mappingEntry.getKey());
