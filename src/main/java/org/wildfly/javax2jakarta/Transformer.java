@@ -21,6 +21,11 @@
  */
 package org.wildfly.javax2jakarta;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
@@ -322,6 +327,26 @@ public final class Transformer {
             }
             return new Transformer(mappingFrom, mappingTo, minimum);
         }
+    }
+
+    public static void main(final String... args) throws Exception {
+        if (args.length != 2) {
+            System.out.println("Usage: " + Transformer.class + " sourceClassFile targetClassFile");
+            return;
+        }
+        // configure transformer
+        final Transformer t = Transformer.newInstance().addMapping("javax/", "jakarta/").build();
+        // get original class content
+        final ByteArrayOutputStream targetBAOS = new ByteArrayOutputStream();
+        final Path source = Paths.get(args[0]);
+        Files.copy(source, targetBAOS);
+        final byte[] sourceBytes = targetBAOS.toByteArray();
+        // transform class
+        final byte[] targetBytes = t.transform(sourceBytes);
+        // write modified class content
+        final ByteArrayInputStream sourceBAIS = new ByteArrayInputStream(targetBytes);
+        final Path target = Paths.get(args[1]);
+        Files.copy(sourceBAIS, target);
     }
 
 }
