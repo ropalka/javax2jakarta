@@ -69,21 +69,21 @@ public final class Transformer {
         this.minimum = minimum;
     }
 
-    public byte[] transform(final byte[] classBuffer) {
+    public byte[] transform(final byte[] classBytes) {
         int position = 8; // skip magic
-        final int poolSize = readUnsignedShort(classBuffer, position);
+        final int poolSize = readUnsignedShort(classBytes, position);
         position = 10;
-        final int utf8ItemsCount = countUtf8Items(classBuffer, poolSize, position);
+        final int utf8ItemsCount = countUtf8Items(classBytes, poolSize, position);
         List<int[]> patches = null;
         byte tag;
         int byteArrayLength;
         int diffInBytes = 0;
         for (int i = 1; i < poolSize; i++) {
-            tag = classBuffer[position++];
+            tag = classBytes[position++];
             if (tag == UTF8) {
-                byteArrayLength = readUnsignedShort(classBuffer, position);
+                byteArrayLength = readUnsignedShort(classBytes, position);
                 position += 2;
-                int[] replacements = findReplacementsInString(classBuffer, position, position + byteArrayLength);
+                int[] replacements = findReplacements(classBytes, position, position + byteArrayLength);
                 if (replacements != null) {
                     if (patches == null) {
                         patches = new ArrayList<>(utf8ItemsCount);
@@ -108,10 +108,10 @@ public final class Transformer {
             }
         }
 
-        if (patches == null) return classBuffer;
+        if (patches == null) return classBytes;
 
-        final byte[] retVal = new byte[classBuffer.length + diffInBytes];
-        System.arraycopy(classBuffer, 0, retVal, 0, 10); // magic, versions, constant pool size
+        final byte[] retVal = new byte[classBytes.length + diffInBytes];
+        System.arraycopy(classBytes, 0, retVal, 0, 10); // magic, versions, constant pool size
         final Iterator<int[]> it = patches.iterator();
         int[] replacements;
         int oldClassBytePosition = 10, newClassBytePosition = 10;
@@ -124,11 +124,11 @@ public final class Transformer {
             } else {
                 // copy all till start of next utf8 item
                 copyLength = replacements[0] - oldClassBytePosition;
-                System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
+                System.arraycopy(classBytes, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
                 oldClassBytePosition += copyLength;
                 newClassBytePosition += copyLength;
                 // patch utf8 length
-                diff = readUnsignedShort(classBuffer, oldClassBytePosition - 2);
+                diff = readUnsignedShort(classBytes, oldClassBytePosition - 2);
                 diff += replacements[1];
                 writeUnsignedShort(retVal, newClassBytePosition - 2, diff);
                 // apply replacements
@@ -138,7 +138,7 @@ public final class Transformer {
                     replacementPosition = replacements[i] & 0xFF;
                     // copy till begin of patch
                     copyLength = replacementPosition - oldClassBytePosition;
-                    System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
+                    System.arraycopy(classBytes, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
                     oldClassBytePosition += copyLength;
                     newClassBytePosition += copyLength;
                     // real patch
@@ -148,7 +148,7 @@ public final class Transformer {
                 }
             }
         }
-        System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, classBuffer.length - oldClassBytePosition);
+        System.arraycopy(classBytes, oldClassBytePosition, retVal, newClassBytePosition, classBytes.length - oldClassBytePosition);
         return retVal;
     }
 
@@ -182,7 +182,7 @@ public final class Transformer {
         return retVal;
     }
 
-    private int[] findReplacementsInString(final byte[] classBytes, final int position, final int limit) {
+    private int[] findReplacements(final byte[] classBytes, final int position, final int limit) {
         int[] retVal = null;
         int mappingIndex;
         int replacementCount = 0;
