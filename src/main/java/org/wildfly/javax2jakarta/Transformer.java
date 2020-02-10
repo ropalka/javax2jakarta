@@ -286,7 +286,7 @@ public final class Transformer {
             mapping = new HashMap<>();
         }
 
-        public void addMapping(final String from, final String to) {
+        public Builder addMapping(final String from, final String to) {
             // preconditions
             if (thread != currentThread()) throw new ConcurrentModificationException();
             if (built) throw new IllegalStateException();
@@ -297,6 +297,7 @@ public final class Transformer {
                 if (key.contains(from) || from.contains(key)) throw new IllegalArgumentException();
             }
             mapping.put(from, to);
+            return this;
         }
 
         public Transformer build() {
