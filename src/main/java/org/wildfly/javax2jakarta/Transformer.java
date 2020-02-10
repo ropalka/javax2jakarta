@@ -108,48 +108,48 @@ public final class Transformer {
             }
         }
 
-        if (patches != null) {
-            final byte[] retVal = new byte[classBuffer.length + diffInBytes];
-            System.arraycopy(classBuffer, 0, retVal, 0, 10); // magic, versions, constant pool size
-            final Iterator<int[]> it = patches.iterator();
-            int[] replacements;
-            int oldClassBytePosition = 10, newClassBytePosition = 10;
-            int replacementIndex, replacementPosition, diff, copyLength;
+        if (patches == null) return classBuffer;
 
-            while (it.hasNext()) {
-                replacements = it.next();
-                if (replacements == null) {
-                    break;
-                } else {
-                    // copy all till start of next utf8 item
-                    copyLength = replacements[0] - oldClassBytePosition;
+        final byte[] retVal = new byte[classBuffer.length + diffInBytes];
+        System.arraycopy(classBuffer, 0, retVal, 0, 10); // magic, versions, constant pool size
+        final Iterator<int[]> it = patches.iterator();
+        int[] replacements;
+        int oldClassBytePosition = 10, newClassBytePosition = 10;
+        int replacementIndex, replacementPosition, diff, copyLength;
+
+        while (it.hasNext()) {
+            replacements = it.next();
+            if (replacements == null) {
+                break;
+            } else {
+                // copy all till start of next utf8 item
+                copyLength = replacements[0] - oldClassBytePosition;
+                System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
+                oldClassBytePosition += copyLength;
+                newClassBytePosition += copyLength;
+                // patch utf8 length
+                diff = readUnsignedShort(classBuffer, oldClassBytePosition - 2);
+                diff += replacements[1];
+                writeUnsignedShort(retVal, newClassBytePosition - 2, diff);
+                // apply replacements
+                for (int i = 2; i < replacements.length; i++) {
+                    replacementIndex = replacements[i] >> 16;
+                    if (replacementIndex == 0) break;
+                    replacementPosition = replacements[i] & 0xFF;
+                    // copy till begin of patch
+                    copyLength = replacementPosition - oldClassBytePosition;
                     System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
                     oldClassBytePosition += copyLength;
                     newClassBytePosition += copyLength;
-                    // patch utf8 length
-                    diff = readUnsignedShort(classBuffer, oldClassBytePosition - 2);
-                    diff += replacements[1];
-                    writeUnsignedShort(retVal, newClassBytePosition - 2, diff);
-                    // apply replacements
-                    for (int i = 2; i < replacements.length; i++) {
-                        replacementIndex = replacements[i] >> 16;
-                        if (replacementIndex == 0) break;
-                        replacementPosition = replacements[i] & 0xFF;
-                        // copy till begin of patch
-                        copyLength = replacementPosition - oldClassBytePosition;
-                        System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
-                        oldClassBytePosition += copyLength;
-                        newClassBytePosition += copyLength;
-                        // real patch
-                        System.arraycopy(mappingTo[replacementIndex], 0, retVal, newClassBytePosition, mappingTo[replacementIndex].length);
-                        oldClassBytePosition += mappingFrom[replacementIndex].length;
-                        newClassBytePosition += mappingTo[replacementIndex].length;
-                    }
+                    // real patch
+                    System.arraycopy(mappingTo[replacementIndex], 0, retVal, newClassBytePosition, mappingTo[replacementIndex].length);
+                    oldClassBytePosition += mappingFrom[replacementIndex].length;
+                    newClassBytePosition += mappingTo[replacementIndex].length;
                 }
             }
-            System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, classBuffer.length - oldClassBytePosition);
-            return retVal;
-        } else return classBuffer;
+        }
+        System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, classBuffer.length - oldClassBytePosition);
+        return retVal;
     }
 
     private int countUtf8Items(final byte[] classBytes, final int constantPoolSize, final int position) {
