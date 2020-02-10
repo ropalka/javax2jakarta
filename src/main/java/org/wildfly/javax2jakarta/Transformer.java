@@ -21,8 +21,11 @@
  */
 package org.wildfly.javax2jakarta;
 
+import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import static java.lang.Thread.currentThread;
@@ -66,22 +69,24 @@ public final class Transformer {
         final int poolSize = readUnsignedShort(classBuffer, position);
         position = 10;
         final int utf8ItemsCount = countUtf8Items(classBuffer, poolSize, position);
+        List<int[]> patches = null;
         byte tag;
         int byteArrayLength;
-        String s;
-        boolean transformClass;
+        int diffInBytes = 0;
         for (int i = 1; i < poolSize; i++) {
             tag = classBuffer[position++];
             if (tag == UTF8) {
                 byteArrayLength = readUnsignedShort(classBuffer, position);
                 position += 2;
-                s = readUTF8(classBuffer, byteArrayLength, position);
+                int[] replacements = findReplacementsInString(classBuffer, position, byteArrayLength);
+                if (replacements != null) {
+                    if (patches == null) {
+                        patches = new ArrayList<>(utf8ItemsCount);
+                    }
+                    diffInBytes += replacements[1];
+                    patches.add(replacements);
+                }
                 position += byteArrayLength;
-                // TODO: it is possible to detect exact byte[] array value for transformed class
-                // TODO: algorithm: for every mapping compute difference
-                //                  process whole contant pool and at the end you will have computed value
-                // TODO: it is not necessary to transform UTF8 to string above - translate mapping to JVM modified UTF8 instead
-                // TODO: implement javax -> jakarta transformation
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
                 position += 2;
             } else if (tag == LONG || tag == DOUBLE) {
@@ -97,7 +102,49 @@ public final class Transformer {
                 throw new UnsupportedClassVersionError();
             }
         }
-        throw new UnsupportedOperationException(); // TODO: implement
+
+        if (patches != null) {
+            final byte[] retVal = new byte[classBuffer.length + diffInBytes];
+            System.arraycopy(classBuffer, 0, retVal, 0, 10); // magic, versions, constant pool size
+            final Iterator<int[]> it = patches.iterator();
+            int[] replacements;
+            int oldClassBytePosition = 10, newClassBytePosition = 10;
+            int replacementIndex, replacementPosition, diff, copyLength;
+
+            while (it.hasNext()) {
+                replacements = it.next();
+                if (replacements == null) {
+                    System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, classBuffer.length - oldClassBytePosition);
+                    break;
+                } else {
+                    // copy all till start of next utf8 item
+                    copyLength = replacements[0] - oldClassBytePosition;
+                    System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
+                    oldClassBytePosition += copyLength;
+                    newClassBytePosition += copyLength;
+                    // patch utf8 length
+                    diff = readUnsignedShort(classBuffer, oldClassBytePosition - 2);
+                    diff += replacements[1];
+                    writeUnsignedShort(retVal, newClassBytePosition - 2, diff);
+                    // apply replacements
+                    for (int i = 2; i < replacements.length / 2;) {
+                        replacementIndex = replacements[i++];
+                        if (replacementIndex == 0) break;
+                        replacementPosition = replacements[i++];
+                        // copy till begin of patch
+                        copyLength = replacementPosition - oldClassBytePosition;
+                        System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
+                        oldClassBytePosition += copyLength;
+                        newClassBytePosition += copyLength;
+                        // real patch
+                        System.arraycopy(mappingTo[replacementIndex], 0, retVal, newClassBytePosition, mappingTo[replacementIndex].length);
+                        oldClassBytePosition += mappingFrom[replacementIndex].length;
+                        newClassBytePosition += mappingTo[replacementIndex].length;
+                    }
+                }
+            }
+            return retVal;
+        } else return classBuffer;
     }
 
     private int countUtf8Items(final byte[] classBytes, final int constantPoolSize, final int position) {
@@ -130,7 +177,7 @@ public final class Transformer {
         return retVal;
     }
 
-    private int[] findReplacementsInString(final byte[] clazzData, final int position, final int limit) {
+    private int[] findReplacementsInString(final byte[] classBytes, final int position, final int limit) {
         int[] retVal = null;
         int mappingIndex;
         int replacementCount = 0;
@@ -140,7 +187,7 @@ public final class Transformer {
                 if (limit - i < mappingFrom[j].length) continue;
                 mappingIndex = j;
                 for (int k = 0; k < mappingFrom[j].length; k++) {
-                    if (clazzData[i + k] != mappingFrom[j][k]) {
+                    if (classBytes[i + k] != mappingFrom[j][k]) {
                         mappingIndex = 0;
                         break;
                     }
@@ -162,23 +209,28 @@ public final class Transformer {
         return retVal;
     }
 
-    private int readUnsignedShort(final byte[] classBuffer, final int position) {
-        return ((classBuffer[position] & 0xFF) << 8) | (classBuffer[position + 1] & 0xFF);
+    private int readUnsignedShort(final byte[] classBytes, final int position) {
+        return ((classBytes[position] & 0xFF) << 8) | (classBytes[position + 1] & 0xFF);
     }
 
-    private static String readUTF8(final byte[] classBuffer, final int byteArrayLength, final int position) {
+    private void writeUnsignedShort(final byte[] classBytes, final int position, final int value) {
+        classBytes[position] = (byte) (value >>> 8);
+        classBytes[position + 1] = (byte) value;
+    }
+
+    private static String readUTF8(final byte[] classBytes, final int byteArrayLength, final int position) {
         final char[] charBuffer = new char[byteArrayLength];
         int charArrayLength = 0;
         int processedBytes = 0;
         int currentByte;
         while (processedBytes < byteArrayLength) {
-            currentByte = classBuffer[processedBytes++];
+            currentByte = classBytes[processedBytes++];
             if ((currentByte & 0x80) == 0) {
                 charBuffer[charArrayLength++] = (char) (currentByte & 0x7F);
             } else if ((currentByte & 0xE0) == 0xC0) {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (classBuffer[position + processedBytes++] & 0x3F));
+                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (classBytes[position + processedBytes++] & 0x3F));
             } else {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((classBuffer[position + processedBytes++] & 0x3F) << 6) + (classBuffer[position + processedBytes++] & 0x3F));
+                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((classBytes[position + processedBytes++] & 0x3F) << 6) + (classBytes[position + processedBytes++] & 0x3F));
             }
         }
         return new String(charBuffer, 0, charArrayLength);
