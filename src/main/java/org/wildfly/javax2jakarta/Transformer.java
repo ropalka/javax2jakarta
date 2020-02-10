@@ -63,7 +63,9 @@ public final class Transformer {
 
     public byte[] transform(final byte[] classBuffer) {
         int position = 8; // skip magic
-        final int poolSize = readUnsignedShort(classBuffer, position);;
+        final int poolSize = readUnsignedShort(classBuffer, position);
+        position = 10;
+        final int utf8ItemsCount = countUtf8Items(classBuffer, poolSize, position);
         byte tag;
         int byteArrayLength;
         String s;
@@ -96,6 +98,36 @@ public final class Transformer {
             }
         }
         throw new UnsupportedOperationException(); // TODO: implement
+    }
+
+    private int countUtf8Items(final byte[] classBytes, final int constantPoolSize, final int position) {
+        int retVal = 0;
+        int index = position;
+        int utf8Length;
+        byte tag;
+
+        for (int i = 1; i < constantPoolSize; i++) {
+            tag = classBytes[index++];
+            if (tag == UTF8) {
+                retVal++;
+                utf8Length = readUnsignedShort(classBytes, index);
+                index += (utf8Length + 2);
+            } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
+                index += 2;
+            } else if (tag == METHOD_HANDLE) {
+                index += 3;
+            } else if (tag == LONG || tag == DOUBLE) {
+                index += 8;
+                i++;
+            } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
+                       tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
+                index += 4;
+            } else {
+                throw new UnsupportedClassVersionError();
+            }
+        }
+
+        return retVal;
     }
 
     private int[] findReplacementsInString(final byte[] clazzData, final int position, final int limit) {
