@@ -78,7 +78,7 @@ public final class Transformer {
             if (tag == UTF8) {
                 byteArrayLength = readUnsignedShort(classBuffer, position);
                 position += 2;
-                int[] replacements = findReplacementsInString(classBuffer, position, byteArrayLength);
+                int[] replacements = findReplacementsInString(classBuffer, position, position + byteArrayLength);
                 if (replacements != null) {
                     if (patches == null) {
                         patches = new ArrayList<>(utf8ItemsCount);
@@ -114,7 +114,6 @@ public final class Transformer {
             while (it.hasNext()) {
                 replacements = it.next();
                 if (replacements == null) {
-                    System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, classBuffer.length - oldClassBytePosition);
                     break;
                 } else {
                     // copy all till start of next utf8 item
@@ -127,10 +126,10 @@ public final class Transformer {
                     diff += replacements[1];
                     writeUnsignedShort(retVal, newClassBytePosition - 2, diff);
                     // apply replacements
-                    for (int i = 2; i < replacements.length / 2;) {
-                        replacementIndex = replacements[i++];
+                    for (int i = 2; i < replacements.length; i++) {
+                        replacementIndex = replacements[i] >> 16;
                         if (replacementIndex == 0) break;
-                        replacementPosition = replacements[i++];
+                        replacementPosition = replacements[i] & 0xFF;
                         // copy till begin of patch
                         copyLength = replacementPosition - oldClassBytePosition;
                         System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
@@ -143,6 +142,7 @@ public final class Transformer {
                     }
                 }
             }
+            System.arraycopy(classBuffer, oldClassBytePosition, retVal, newClassBytePosition, classBuffer.length - oldClassBytePosition);
             return retVal;
         } else return classBuffer;
     }
@@ -197,7 +197,7 @@ public final class Transformer {
                         retVal = new int[((limit - position) / minimum) + 2];
                         retVal[0] = position;
                     }
-                    retVal[2 + replacementCount++] = mappingIndex << 16 | i - position;
+                    retVal[2 + replacementCount++] = mappingIndex << 16 | i;
                     diffInBytes += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
                     i += mappingFrom[j].length;
                 }
@@ -218,12 +218,12 @@ public final class Transformer {
         classBytes[position + 1] = (byte) value;
     }
 
-    private static String readUTF8(final byte[] classBytes, final int byteArrayLength, final int position) {
-        final char[] charBuffer = new char[byteArrayLength];
+    private static String readUTF8(final byte[] classBytes, final int position, final int limit) {
+        final char[] charBuffer = new char[limit - position];
         int charArrayLength = 0;
-        int processedBytes = 0;
+        int processedBytes = position;
         int currentByte;
-        while (processedBytes < byteArrayLength) {
+        while (processedBytes < limit) {
             currentByte = classBytes[processedBytes++];
             if ((currentByte & 0x80) == 0) {
                 charBuffer[charArrayLength++] = (char) (currentByte & 0x7F);
