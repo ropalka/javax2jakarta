@@ -87,7 +87,7 @@ public final class Transformer {
         int position = 8; // skip magic
         final int poolSize = readUnsignedShort(classBytes, position);
         position = 10;
-        final int utf8ItemsCount = countUtf8Items(classBytes, poolSize, position);
+        final int utf8ItemsCount = countUtf8Items(classBytes, position, poolSize);
         List<int[]> patches = null;
         byte tag;
         int byteArrayLength;
@@ -166,17 +166,25 @@ public final class Transformer {
         return retVal;
     }
 
-    private int countUtf8Items(final byte[] classBytes, final int constantPoolSize, final int position) {
+    /**
+     * Counts how many <code>CONSTANT_Utf8_info</code> structures are present in class constant pool.
+     *
+     * @param clazz class bytes
+     * @param offset start of class constant pool definition
+     * @param poolSize class constant pool size
+     * @return
+     */
+    private static int countUtf8Items(final byte[] clazz, final int offset, final int poolSize) {
         int retVal = 0;
-        int index = position;
+        int index = offset;
         int utf8Length;
         byte tag;
 
-        for (int i = 1; i < constantPoolSize; i++) {
-            tag = classBytes[index++];
+        for (int i = 1; i < poolSize; i++) {
+            tag = clazz[index++];
             if (tag == UTF8) {
                 retVal++;
-                utf8Length = readUnsignedShort(classBytes, index);
+                utf8Length = readUnsignedShort(clazz, index);
                 index += (utf8Length + 2);
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
                 index += 2;
@@ -228,11 +236,11 @@ public final class Transformer {
         return retVal;
     }
 
-    private int readUnsignedShort(final byte[] classBytes, final int position) {
+    private static int readUnsignedShort(final byte[] classBytes, final int position) {
         return ((classBytes[position] & 0xFF) << 8) | (classBytes[position + 1] & 0xFF);
     }
 
-    private void writeUnsignedShort(final byte[] classBytes, final int position, final int value) {
+    private static void writeUnsignedShort(final byte[] classBytes, final int position, final int value) {
         classBytes[position] = (byte) (value >>> 8);
         classBytes[position + 1] = (byte) value;
     }
