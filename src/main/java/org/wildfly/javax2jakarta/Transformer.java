@@ -21,6 +21,9 @@
  */
 package org.wildfly.javax2jakarta;
 
+import static java.lang.Thread.currentThread;
+import static org.wildfly.javax2jakarta.ClassFileUtils.*;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
@@ -33,8 +36,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static java.lang.Thread.currentThread;
-
 /**
  * Simple thread safe class file transformer.
  *
@@ -42,33 +43,15 @@ import static java.lang.Thread.currentThread;
  */
 public final class Transformer {
 
-    private static final byte UTF8 = 1;
-    private static final byte INTEGER = 3;
-    private static final byte FLOAT = 4;
-    private static final byte LONG = 5;
-    private static final byte DOUBLE = 6;
-    private static final byte CLASS = 7;
-    private static final byte STRING = 8;
-    private static final byte FIELD_REF = 9;
-    private static final byte METHOD_REF = 10;
-    private static final byte INTERFACE_METHOD_REF = 11;
-    private static final byte NAME_AND_TYPE = 12;
-    private static final byte METHOD_HANDLE = 15;
-    private static final byte METHOD_TYPE = 16;
-    private static final byte DYNAMIC = 17;
-    private static final byte INVOKE_DYNAMIC = 18;
-    private static final byte MODULE = 19;
-    private static final byte PACKAGE = 20;
-
     /**
-     * Represents strings we are searching for in CONSTANT_Utf8_info structures (encoded in modified UTF-8).
-     * Mapping on index zero is undefined. Mappings are defined from index one.
+     * Represents strings we are searching for in <code>CONSTANT_Utf8_info</code> structures (encoded in modified UTF-8).
+     * Mapping on index <code>zero</code> is undefined. Mappings are defined from index <code>one</code>.
      */
     private final byte[][] mappingFrom;
 
     /**
-     * Represents strings we will replace matches with inside CONSTANT_Utf8_info structures (encoded in modified UTF-8).
-     * Mapping on index zero is undefined. Mappings are defined from index one.
+     * Represents strings we will replace matches with inside <code>CONSTANT_Utf8_info</code> structures (encoded in modified UTF-8).
+     * Mapping on index <code>zero</code> is undefined. Mappings are defined from index <code>one</code>.
      */
     private final byte[][] mappingTo;
 
@@ -166,44 +149,6 @@ public final class Transformer {
         return retVal;
     }
 
-    /**
-     * Counts how many <code>CONSTANT_Utf8_info</code> structures are present in class constant pool.
-     *
-     * @param clazz class bytes
-     * @param offset start of class constant pool definition
-     * @param poolSize class constant pool size
-     * @return
-     */
-    private static int countUtf8Items(final byte[] clazz, final int offset, final int poolSize) {
-        int retVal = 0;
-        int index = offset;
-        int utf8Length;
-        byte tag;
-
-        for (int i = 1; i < poolSize; i++) {
-            tag = clazz[index++];
-            if (tag == UTF8) {
-                retVal++;
-                utf8Length = readUnsignedShort(clazz, index);
-                index += (utf8Length + 2);
-            } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
-                index += 2;
-            } else if (tag == METHOD_HANDLE) {
-                index += 3;
-            } else if (tag == LONG || tag == DOUBLE) {
-                index += 8;
-                i++;
-            } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
-                       tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
-                index += 4;
-            } else {
-                throw new UnsupportedClassVersionError();
-            }
-        }
-
-        return retVal;
-    }
-
     private int[] findReplacements(final byte[] classBytes, final int position, final int limit) {
         int[] retVal = null;
         int mappingIndex;
@@ -233,69 +178,6 @@ public final class Transformer {
         if (retVal != null) {
             retVal[1] = diffInBytes;
         }
-        return retVal;
-    }
-
-    private static int readUnsignedShort(final byte[] classBytes, final int position) {
-        return ((classBytes[position] & 0xFF) << 8) | (classBytes[position + 1] & 0xFF);
-    }
-
-    private static void writeUnsignedShort(final byte[] classBytes, final int position, final int value) {
-        classBytes[position] = (byte) (value >>> 8);
-        classBytes[position + 1] = (byte) value;
-    }
-
-    private static String readUTF8(final byte[] classBytes, final int position, final int limit) {
-        final char[] charBuffer = new char[limit - position];
-        int charArrayLength = 0;
-        int processedBytes = position;
-        int currentByte;
-        while (processedBytes < limit) {
-            currentByte = classBytes[processedBytes++];
-            if ((currentByte & 0x80) == 0) {
-                charBuffer[charArrayLength++] = (char) (currentByte & 0x7F);
-            } else if ((currentByte & 0xE0) == 0xC0) {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (classBytes[position + processedBytes++] & 0x3F));
-            } else {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((classBytes[position + processedBytes++] & 0x3F) << 6) + (classBytes[position + processedBytes++] & 0x3F));
-            }
-        }
-        return new String(charBuffer, 0, charArrayLength);
-    }
-
-    private static byte[] writeUTF8(final String data) {
-        final byte[] retVal = new byte[getByteArraySize(data)];
-        int bytesCount = 0;
-        int currentChar;
-
-        for (int i = 0; i < data.length(); i++) {
-            currentChar = data.charAt(i);
-            if (currentChar < 0x80 && currentChar != 0) {
-                retVal[bytesCount++] = (byte) currentChar;
-            } else if (currentChar >= 0x800) {
-                retVal[bytesCount++] = (byte) (0xE0 | ((currentChar >> 12) & 0x0F));
-                retVal[bytesCount++] = (byte) (0x80 | ((currentChar >> 6) & 0x3F));
-                retVal[bytesCount++] = (byte) (0x80 | ((currentChar >> 0) & 0x3F));
-            } else {
-                retVal[bytesCount++] = (byte) (0xC0 | ((currentChar >> 6) & 0x1F));
-                retVal[bytesCount++] = (byte) (0x80 | ((currentChar >> 0) & 0x3F));
-            }
-        }
-
-        return retVal;
-    }
-
-    private static int getByteArraySize(final String data) {
-        int retVal = data.length();
-        int currentChar;
-
-        for (int i = 0; i < data.length(); i++) {
-            currentChar = data.charAt(i);
-            if (currentChar >= 0x80 || currentChar == 0) {
-                retVal += (currentChar >= 0x800) ? 2 : 1;
-            }
-        }
-
         return retVal;
     }
 
