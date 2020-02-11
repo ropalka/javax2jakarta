@@ -22,65 +22,133 @@
 package org.wildfly.javax2jakarta;
 
 /**
- * Utility class for working with class file content
- * in accordance with Java VM specification (version 13).
+ * Utility class for working with class file content.
+ * Compatible with Java VM specification version 13 and below.
  *
  * <a href="mailto:ropalka@redhat.com">Richard Opálka</a>
  */
 final class ClassFileUtils {
 
+    /**
+     * <code>CONSTANT_Utf8_info</code> structure tag.
+     */
     static final byte UTF8 = 1;
+    /**
+     * <code>CONSTANT_Integer_info</code> structure tag.
+     */
     static final byte INTEGER = 3;
+    /**
+     * <code>CONSTANT_Float_info</code> structure tag.
+     */
     static final byte FLOAT = 4;
+    /**
+     * <code>CONSTANT_Long_info</code> structure tag.
+     */
     static final byte LONG = 5;
+    /**
+     * <code>CONSTANT_Double_info</code> structure tag.
+     */
     static final byte DOUBLE = 6;
+    /**
+     * <code>CONSTANT_Class_info</code> structure tag.
+     */
     static final byte CLASS = 7;
+    /**
+     * <code>CONSTANT_String_info</code> structure tag.
+     */
     static final byte STRING = 8;
+    /**
+     * <code>CONSTANT_Fieldref_info</code> structure tag.
+     */
     static final byte FIELD_REF = 9;
+    /**
+     * <code>CONSTANT_Methodref_info</code> structure tag.
+     */
     static final byte METHOD_REF = 10;
+    /**
+     * <code>CONSTANT_InterfaceMethodref_info</code> structure tag.
+     */
     static final byte INTERFACE_METHOD_REF = 11;
+    /**
+     * <code>CONSTANT_NameAndType_info</code> structure tag.
+     */
     static final byte NAME_AND_TYPE = 12;
+    /**
+     * <code>CONSTANT_MethodHandle_info</code> structure tag.
+     */
     static final byte METHOD_HANDLE = 15;
+    /**
+     * <code>CONSTANT_MethodType_info</code> structure tag.
+     */
     static final byte METHOD_TYPE = 16;
+    /**
+     * <code>CONSTANT_Dynamic_info</code> structure tag.
+     */
     static final byte DYNAMIC = 17;
+    /**
+     * <code>CONSTANT_InvokeDynamic_info</code> structure tag.
+     */
     static final byte INVOKE_DYNAMIC = 18;
+    /**
+     * <code>CONSTANT_Module_info</code> structure tag.
+     */
     static final byte MODULE = 19;
+    /**
+     * <code>CONSTANT_Package_info</code> structure tag.
+     */
     static final byte PACKAGE = 20;
 
+    /**
+     * Constructor.
+     */
     private ClassFileUtils() {
         // forbidden instantiation
     }
 
+    /**
+     * Reads unsigned short value from given class file position.
+     *
+     * @param clazz class data
+     * @param offset the index to start reading from
+     * @return read value
+     */
     static int readUnsignedShort(final byte[] clazz, final int offset) {
         return ((clazz[offset] & 0xFF) << 8) | (clazz[offset + 1] & 0xFF);
     }
 
-    static void writeUnsignedShort(final byte[] clazz, final int offset, final int newValue) {
-        clazz[offset] = (byte) (newValue >>> 8);
-        clazz[offset + 1] = (byte) newValue;
+    /**
+     * Writes unsigned short value to given class file position.
+     *
+     * @param clazz class data
+     * @param offset the index to start writing from
+     * @param value the value to write
+     */
+    static void writeUnsignedShort(final byte[] clazz, final int offset, final int value) {
+        clazz[offset] = (byte) (value >>> 8);
+        clazz[offset + 1] = (byte) value;
     }
 
     /**
      * Decodes modified UTF-8 to string.
      *
      * @param clazz class bytes
-     * @param offset the index of the first byte to decode
-     * @param limit the limit for decoding
+     * @param offset the index of the first byte of modified UTF-8
+     * @param limit the limit of modified UTF-8
      * @return decoded string
      */
     static String utf8ToString(final byte[] clazz, final int offset, final int limit) {
         final char[] charBuffer = new char[limit - offset];
         int charsCount = 0;
-        int processedBytes = offset;
+        int index = offset;
         int currentByte;
-        while (processedBytes < limit) {
-            currentByte = clazz[processedBytes++];
+        while (index < limit) {
+            currentByte = clazz[index++];
             if ((currentByte & 0x80) == 0) {
                 charBuffer[charsCount++] = (char) (currentByte & 0x7F);
             } else if ((currentByte & 0xE0) == 0xC0) {
-                charBuffer[charsCount++] = (char) (((currentByte & 0x1F) << 6) + (clazz[processedBytes++] & 0x3F));
+                charBuffer[charsCount++] = (char) (((currentByte & 0x1F) << 6) + (clazz[index++] & 0x3F));
             } else {
-                charBuffer[charsCount++] = (char) (((currentByte & 0xF) << 12) + ((clazz[processedBytes++] & 0x3F) << 6) + (clazz[processedBytes++] & 0x3F));
+                charBuffer[charsCount++] = (char) (((currentByte & 0xF) << 12) + ((clazz[index++] & 0x3F) << 6) + (clazz[index++] & 0x3F));
             }
         }
         return new String(charBuffer, 0, charsCount);
