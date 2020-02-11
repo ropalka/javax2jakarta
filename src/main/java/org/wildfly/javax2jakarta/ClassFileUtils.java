@@ -60,26 +60,40 @@ final class ClassFileUtils {
         clazz[offset + 1] = (byte) newValue;
     }
 
-    static String readUTF8(final byte[] clazz, final int position, final int limit) {
-        final char[] charBuffer = new char[limit - position];
-        int charArrayLength = 0;
-        int processedBytes = position;
+    /**
+     * Decodes modified UTF-8 to string.
+     *
+     * @param clazz class bytes
+     * @param offset the index of the first byte to decode
+     * @param limit the limit for decoding
+     * @return decoded string
+     */
+    static String utf8ToString(final byte[] clazz, final int offset, final int limit) {
+        final char[] charBuffer = new char[limit - offset];
+        int charsCount = 0;
+        int processedBytes = offset;
         int currentByte;
         while (processedBytes < limit) {
             currentByte = clazz[processedBytes++];
             if ((currentByte & 0x80) == 0) {
-                charBuffer[charArrayLength++] = (char) (currentByte & 0x7F);
+                charBuffer[charsCount++] = (char) (currentByte & 0x7F);
             } else if ((currentByte & 0xE0) == 0xC0) {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (clazz[position + processedBytes++] & 0x3F));
+                charBuffer[charsCount++] = (char) (((currentByte & 0x1F) << 6) + (clazz[offset + processedBytes++] & 0x3F));
             } else {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((clazz[position + processedBytes++] & 0x3F) << 6) + (clazz[position + processedBytes++] & 0x3F));
+                charBuffer[charsCount++] = (char) (((currentByte & 0xF) << 12) + ((clazz[offset + processedBytes++] & 0x3F) << 6) + (clazz[offset + processedBytes++] & 0x3F));
             }
         }
-        return new String(charBuffer, 0, charArrayLength);
+        return new String(charBuffer, 0, charsCount);
     }
 
-    static byte[] writeUTF8(final String data) {
-        final byte[] retVal = new byte[getByteArraySize(data)];
+    /**
+     * Encodes string to modified UTF-8.
+     *
+     * @param data string
+     * @return encoded modified UTF-8
+     */
+    static byte[] stringToUtf8(final String data) {
+        final byte[] retVal = new byte[getUtf8Size(data)];
         int bytesCount = 0;
         int currentChar;
 
@@ -138,7 +152,13 @@ final class ClassFileUtils {
         return retVal;
     }
 
-    private static int getByteArraySize(final String data) {
+    /**
+     * Counts size for modified UTF-8 encoding.
+     *
+     * @param data to be converted
+     * @return byte array size of modified UTF-8
+     */
+    private static int getUtf8Size(final String data) {
         int retVal = data.length();
         int currentChar;
 

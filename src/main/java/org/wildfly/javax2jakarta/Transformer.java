@@ -222,8 +222,8 @@ public final class Transformer {
             int i = 1;
             int minimum = Integer.MAX_VALUE;
             for (Map.Entry<String, String> mappingEntry : mapping.entrySet()) {
-                mappingFrom[i] = writeUTF8(mappingEntry.getKey());
-                mappingTo[i] = writeUTF8(mappingEntry.getValue());
+                mappingFrom[i] = stringToUtf8(mappingEntry.getKey());
+                mappingTo[i] = stringToUtf8(mappingEntry.getValue());
                 if (minimum > mappingFrom[i].length) {
                     minimum = mappingFrom[i].length;
                 }
