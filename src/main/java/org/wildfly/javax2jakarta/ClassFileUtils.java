@@ -51,28 +51,28 @@ final class ClassFileUtils {
         // forbidden instantiation
     }
 
-    static int readUnsignedShort(final byte[] classBytes, final int position) {
-        return ((classBytes[position] & 0xFF) << 8) | (classBytes[position + 1] & 0xFF);
+    static int readUnsignedShort(final byte[] clazz, final int offset) {
+        return ((clazz[offset] & 0xFF) << 8) | (clazz[offset + 1] & 0xFF);
     }
 
-    static void writeUnsignedShort(final byte[] classBytes, final int position, final int value) {
-        classBytes[position] = (byte) (value >>> 8);
-        classBytes[position + 1] = (byte) value;
+    static void writeUnsignedShort(final byte[] clazz, final int offset, final int newValue) {
+        clazz[offset] = (byte) (newValue >>> 8);
+        clazz[offset + 1] = (byte) newValue;
     }
 
-    static String readUTF8(final byte[] classBytes, final int position, final int limit) {
+    static String readUTF8(final byte[] clazz, final int position, final int limit) {
         final char[] charBuffer = new char[limit - position];
         int charArrayLength = 0;
         int processedBytes = position;
         int currentByte;
         while (processedBytes < limit) {
-            currentByte = classBytes[processedBytes++];
+            currentByte = clazz[processedBytes++];
             if ((currentByte & 0x80) == 0) {
                 charBuffer[charArrayLength++] = (char) (currentByte & 0x7F);
             } else if ((currentByte & 0xE0) == 0xC0) {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (classBytes[position + processedBytes++] & 0x3F));
+                charBuffer[charArrayLength++] = (char) (((currentByte & 0x1F) << 6) + (clazz[position + processedBytes++] & 0x3F));
             } else {
-                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((classBytes[position + processedBytes++] & 0x3F) << 6) + (classBytes[position + processedBytes++] & 0x3F));
+                charBuffer[charArrayLength++] = (char) (((currentByte & 0xF) << 12) + ((clazz[position + processedBytes++] & 0x3F) << 6) + (clazz[position + processedBytes++] & 0x3F));
             }
         }
         return new String(charBuffer, 0, charArrayLength);
