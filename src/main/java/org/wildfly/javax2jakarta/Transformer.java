@@ -60,6 +60,13 @@ public final class Transformer {
      */
     private final int minimum;
 
+    /**
+     * Constructor.
+     *
+     * @param mappingFrom modified UTF-8 encoded search strings
+     * @param mappingTo modified UTF-8 encoded patch strings
+     * @param minimum length of the smallest search string
+     */
     private Transformer(final byte[][] mappingFrom, final byte[][] mappingTo, final int minimum) {
         this.mappingFrom = mappingFrom;
         this.mappingTo = mappingTo;
@@ -181,6 +188,11 @@ public final class Transformer {
         return retVal;
     }
 
+    /**
+     * Returns new builder for configuring the class file transformer.
+     *
+     * @return class file transformer builder
+     */
     public static Transformer.Builder newInstance() {
         return new Builder();
     }
