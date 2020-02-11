@@ -36,7 +36,8 @@ import java.util.Map;
 import static java.lang.Thread.currentThread;
 
 /**
- // TODO: javadoc
+ * Simple thread safe class file transformer.
+ *
  * <a href="mailto:ropalka@redhat.com">Richard Opálka</a>
  */
 public final class Transformer {
@@ -59,8 +60,21 @@ public final class Transformer {
     private static final byte MODULE = 19;
     private static final byte PACKAGE = 20;
 
+    /**
+     * Represents strings we are searching for in CONSTANT_Utf8_info structures (encoded in modified UTF-8).
+     * Mapping on index zero is undefined. Mappings are defined from index one.
+     */
     private final byte[][] mappingFrom;
+
+    /**
+     * Represents strings we will replace matches with inside CONSTANT_Utf8_info structures (encoded in modified UTF-8).
+     * Mapping on index zero is undefined. Mappings are defined from index one.
+     */
     private final byte[][] mappingTo;
+
+    /**
+     * Used for detecting maximum size of internal patch info arrays.
+     */
     private final int minimum;
 
     private Transformer(final byte[][] mappingFrom, final byte[][] mappingTo, final int minimum) {
