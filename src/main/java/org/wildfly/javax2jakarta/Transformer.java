@@ -82,18 +82,19 @@ public final class Transformer {
         byte tag;
         int byteArrayLength;
         int diffInBytes = 0;
+        int[] patch;
         for (int i = 1; i < poolSize; i++) {
             tag = classBytes[position++];
             if (tag == UTF8) {
                 byteArrayLength = readUnsignedShort(classBytes, position);
                 position += 2;
-                int[] replacements = findReplacements(classBytes, position, position + byteArrayLength);
-                if (replacements != null) {
+                patch = findReplacements(classBytes, position, position + byteArrayLength);
+                if (patch != null) {
                     if (patches == null) {
                         patches = new ArrayList<>(utf8ItemsCount);
                     }
-                    diffInBytes += replacements[1];
-                    patches.add(replacements);
+                    diffInBytes += patch[1];
+                    patches.add(patch);
                 }
                 position += byteArrayLength;
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
