@@ -188,8 +188,7 @@ public final class Transformer {
     private int[] getPatch(final byte[] clazz, final int offset, final int limit) {
         int[] retVal = null;
         int mappingIndex;
-        int patchesCount = 0;
-        int diffInBytes = 0;
+        int patchIndex = 2;
 
         for (int i = offset; i <= limit - minimum; i++) {
             for (int j = 1; j < mappingFrom.length; j++) {
@@ -206,16 +205,14 @@ public final class Transformer {
                         retVal = new int[((limit - i) / minimum) + 2];
                         retVal[0] = offset;
                     }
-                    retVal[2 + patchesCount++] = mappingIndex << 16 | i;
-                    diffInBytes += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
+                    retVal[patchIndex++] = mappingIndex << 16 | i;
+                    retVal[1] += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
                     i += mappingFrom[j].length - 1;
                     break;
                 }
             }
         }
-        if (retVal != null) {
-            retVal[1] = diffInBytes;
-        }
+
         return retVal;
     }
 
