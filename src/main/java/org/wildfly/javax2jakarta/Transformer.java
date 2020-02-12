@@ -207,7 +207,8 @@ public final class Transformer {
                     }
                     retVal[2 + replacementCount++] = mappingIndex << 16 | i;
                     diffInBytes += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
-                    i += mappingFrom[j].length;
+                    i += mappingFrom[j].length - 1;
+                    break;
                 }
             }
         }
