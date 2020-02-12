@@ -157,7 +157,35 @@ public final class Transformer {
         return retVal;
     }
 
-    private int[] findReplacements(final byte[] classBytes, final int position, final int limit) {
+    /**
+     * Returns <code>patch info</code> if patches were detected or <code>null</code> if there is no patch applicable.
+     * Every <code>patch info</code> has the following format:
+     * <p>
+     *     <pre>
+     *         +-----------+
+     *         | integer 0 | byte position of beginning of <code>CONSTANT_Utf8_info</code> structure in original class file
+     *         +-----------+
+     *         | integer 1 | <code>CONSTANT_Utf8_info</code> structure difference in bytes after applied patches
+     *         +-----------+
+     *         | integer 2 | first two bytes hold non-zero mapping index in mapping tables of 1-st applied patch
+     *         |           | last two bytes hold index of 1-st patch start inside original <code>CONSTANT_Utf8_info</code> structure
+     *         +-----------+
+     *         | integer 2 | first two bytes hold non-zero mapping index in mapping tables of 2-nd applied patch
+     *         |           | last two bytes hold index of 2-nd patch start inside original <code>CONSTANT_Utf8_info</code> structure
+     *         +-----------+
+     *         |    ...    | etc
+     *         +-----------+
+     *         | integer N | mapping index in mapping tables equal to zero indicates <code>patch info</code> structure end
+     *         +-----------+
+     *     </pre>
+     * </p>
+     *
+     * @param clazz class byte code
+     * @param position beginning index of <code>CONSTANT_Utf8_info</code> structure being investigated
+     * @param limit end index not belonging to <code>CONSTANT_Utf8_info</code> structure
+     * @return
+     */
+    private int[] findReplacements(final byte[] clazz, final int position, final int limit) {
         int[] retVal = null;
         int mappingIndex;
         int replacementCount = 0;
@@ -167,7 +195,7 @@ public final class Transformer {
                 if (limit - i < mappingFrom[j].length) continue;
                 mappingIndex = j;
                 for (int k = 0; k < mappingFrom[j].length; k++) {
-                    if (classBytes[i + k] != mappingFrom[j][k]) {
+                    if (clazz[i + k] != mappingFrom[j][k]) {
                         mappingIndex = 0;
                         break;
                     }
