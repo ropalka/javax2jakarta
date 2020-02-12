@@ -56,7 +56,7 @@ public final class Transformer {
     private final byte[][] mappingTo;
 
     /**
-     * Used for detecting maximum size of internal patch info arrays.
+     * Used for detecting maximum size of internal patch info arrays and for decreasing patch search space.
      */
     private final int minimum;
 
@@ -191,7 +191,7 @@ public final class Transformer {
         int patchesCount = 0;
         int diffInBytes = 0;
 
-        for (int i = offset; i < limit; i++) {
+        for (int i = offset; i <= limit - minimum; i++) {
             for (int j = 1; j < mappingFrom.length; j++) {
                 if (limit - i < mappingFrom[j].length) continue;
                 mappingIndex = j;
