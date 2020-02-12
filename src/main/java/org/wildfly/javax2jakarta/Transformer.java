@@ -203,7 +203,7 @@ public final class Transformer {
                 }
                 if (mappingIndex != 0) {
                     if (retVal == null) {
-                        retVal = new int[((limit - offset) / minimum) + 2];
+                        retVal = new int[((limit - i) / minimum) + 2];
                         retVal[0] = offset;
                     }
                     retVal[2 + patchesCount++] = mappingIndex << 16 | i;
