@@ -82,19 +82,19 @@ public final class Transformer {
         byte tag;
         int byteArrayLength;
         int diffInBytes = 0;
-        int[] patch;
+        int[] patchInfo;
         for (int i = 1; i < poolSize; i++) {
             tag = classBytes[position++];
             if (tag == UTF8) {
                 byteArrayLength = readUnsignedShort(classBytes, position);
                 position += 2;
-                patch = findReplacements(classBytes, position, position + byteArrayLength);
-                if (patch != null) {
+                patchInfo = getPatch(classBytes, position, position + byteArrayLength);
+                if (patchInfo != null) {
                     if (patches == null) {
                         patches = new ArrayList<>(utf8ItemsCount);
                     }
-                    diffInBytes += patch[1];
-                    patches.add(patch);
+                    diffInBytes += patchInfo[1];
+                    patches.add(patchInfo);
                 }
                 position += byteArrayLength;
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
@@ -175,22 +175,23 @@ public final class Transformer {
      *         +-----------+
      *         |    ...    | etc
      *         +-----------+
-     *         | integer N | mapping index in mapping tables equal to zero indicates <code>patch info</code> structure end
+     *         | integer N | first two bytes of mapping index equal to zero indicate <code>patch info</code> structure end
      *         +-----------+
      *     </pre>
      * </p>
      *
      * @param clazz class byte code
-     * @param position beginning index of <code>CONSTANT_Utf8_info</code> structure being investigated
-     * @param limit end index not belonging to <code>CONSTANT_Utf8_info</code> structure
+     * @param offset beginning index of <code>CONSTANT_Utf8_info</code> structure being investigated
+     * @param limit first index not belonging to <code>CONSTANT_Utf8_info</code> structure
      * @return
      */
-    private int[] findReplacements(final byte[] clazz, final int position, final int limit) {
+    private int[] getPatch(final byte[] clazz, final int offset, final int limit) {
         int[] retVal = null;
         int mappingIndex;
-        int replacementCount = 0;
+        int patchesCount = 0;
         int diffInBytes = 0;
-        for (int i = position; i < limit; i++) {
+
+        for (int i = offset; i < limit; i++) {
             for (int j = 1; j < mappingFrom.length; j++) {
                 if (limit - i < mappingFrom[j].length) continue;
                 mappingIndex = j;
@@ -202,10 +203,10 @@ public final class Transformer {
                 }
                 if (mappingIndex != 0) {
                     if (retVal == null) {
-                        retVal = new int[((limit - position) / minimum) + 2];
-                        retVal[0] = position;
+                        retVal = new int[((limit - offset) / minimum) + 2];
+                        retVal[0] = offset;
                     }
-                    retVal[2 + replacementCount++] = mappingIndex << 16 | i;
+                    retVal[2 + patchesCount++] = mappingIndex << 16 | i;
                     diffInBytes += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
                     i += mappingFrom[j].length - 1;
                     break;
