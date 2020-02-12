@@ -97,6 +97,14 @@ final class ClassFileUtils {
      * <code>CONSTANT_Package_info</code> structure tag.
      */
     static final byte PACKAGE = 20;
+    /**
+     * Constant pool size index inside class file.
+     */
+    static final int POOL_SIZE_INDEX = 8;
+    /**
+     * Constant pool content beginning index inside class file.
+     */
+    static final int POOL_CONTENT_INDEX = POOL_SIZE_INDEX + 2;
 
     /**
      * Constructor.
@@ -186,13 +194,12 @@ final class ClassFileUtils {
      * Counts how many <code>CONSTANT_Utf8_info</code> structures are present in class constant pool.
      *
      * @param clazz class bytes
-     * @param offset start of class constant pool definition
-     * @param poolSize class constant pool size
-     * @return
+     * @return <code>CONSTANT_Utf8_info</code> structures count in class constant pool
      */
-    static int countUtf8Items(final byte[] clazz, final int offset, final int poolSize) {
+    static int countUtf8Items(final byte[] clazz) {
+        final int poolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
         int retVal = 0;
-        int index = offset;
+        int index = POOL_CONTENT_INDEX;
         int utf8Length;
         byte tag;
 
@@ -208,9 +215,9 @@ final class ClassFileUtils {
                 index += 3;
             } else if (tag == LONG || tag == DOUBLE) {
                 index += 8;
-                i++;
+                i++; // see JVM specification
             } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
-                    tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
+                       tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
                 index += 4;
             } else {
                 throw new UnsupportedClassVersionError();

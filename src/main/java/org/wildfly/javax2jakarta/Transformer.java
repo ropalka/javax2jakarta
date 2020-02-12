@@ -74,10 +74,9 @@ public final class Transformer {
     }
 
     public byte[] transform(final byte[] classBytes) {
-        int position = 8; // skip magic
-        final int poolSize = readUnsignedShort(classBytes, position);
-        position = 10;
-        final int utf8ItemsCount = countUtf8Items(classBytes, position, poolSize);
+        final int poolSize = readUnsignedShort(classBytes, POOL_SIZE_INDEX);
+        int position = POOL_CONTENT_INDEX;
+        final int utf8ItemsCount = countUtf8Items(classBytes);
         List<int[]> patches = null;
         byte tag;
         int byteArrayLength;
@@ -102,9 +101,8 @@ public final class Transformer {
             } else if (tag == LONG || tag == DOUBLE) {
                 position += 8;
                 i++; // see JVM specification
-            } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF
-            || tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE
-            || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
+            } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
+                       tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
                 position += 4;
             } else if (tag == METHOD_HANDLE) {
                 position += 3;
@@ -182,7 +180,7 @@ public final class Transformer {
      *
      * @param clazz class byte code
      * @param offset beginning index of <code>CONSTANT_Utf8_info</code> structure being investigated
-     * @param limit first index not belonging to <code>CONSTANT_Utf8_info</code> structure
+     * @param limit first index not belonging to investigated <code>CONSTANT_Utf8_info</code> structure
      * @return
      */
     private int[] getPatch(final byte[] clazz, final int offset, final int limit) {
