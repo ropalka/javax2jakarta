@@ -37,9 +37,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Simple thread safe class file transformer.
+ * Class file transformer.
+ * Instances of this class are thread safe.
  *
- * <a href="mailto:ropalka@redhat.com">Richard Opálka</a>
+ * @author <a href="mailto:ropalka@redhat.com">Richard Opálka</a>
  */
 public final class Transformer {
 
@@ -223,6 +224,11 @@ public final class Transformer {
         return new Builder();
     }
 
+    /**
+     * Class file transformer builder. Instances of this class are thread safe.
+     *
+     * @author <a href="mailto:ropalka@redhat.com">Richard Opálka</a>
+     */
     public static final class Builder {
         private final Thread thread;
         private final Map<String, String> mapping;
@@ -233,12 +239,27 @@ public final class Transformer {
             mapping = new HashMap<>();
         }
 
+        /**
+         * Adds mapping configuration.
+         *
+         * @param from string to be removed
+         * @param to string to be replaced with
+         * @return this builder instance
+         * @throws ConcurrentModificationException if builder instance is used by multiple threads
+         * @throws IllegalStateException if {@link #build()} have been already called
+         * @throws IllegalArgumentException if any method parameter is <code>null</code>
+         * or if any method parameter equals to <code>empty string</code>
+         * or if method parameters define identity mapping
+         * or if <code>from</code> parameter is substring of previously registered mapping
+         * of if previously registered mapping is substring of <code>from</code> parameter
+         */
         public Builder addMapping(final String from, final String to) {
             // preconditions
             if (thread != currentThread()) throw new ConcurrentModificationException();
             if (built) throw new IllegalStateException();
             if (from == null || to == null) throw new IllegalArgumentException();
             if (from.length() == 0 || to.length() == 0) throw new IllegalArgumentException();
+            if (from.equals(to)) throw new IllegalArgumentException();
             // implementation
             for (String key : mapping.keySet()) {
                 if (key.contains(from) || from.contains(key)) throw new IllegalArgumentException();
@@ -247,6 +268,14 @@ public final class Transformer {
             return this;
         }
 
+        /**
+         * Creates new configured class file transformer.
+         *
+         * @return new configured class file transformer
+         * @throws ConcurrentModificationException if builder instance is used by multiple threads
+         * @throws IllegalStateException if {@link #build()} have been already called
+         * or {@link #addMapping(String, String)} wasn't called before
+         */
         public Transformer build() {
             // preconditions
             if (thread != currentThread()) throw new ConcurrentModificationException();
