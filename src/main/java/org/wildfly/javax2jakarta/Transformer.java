@@ -74,21 +74,27 @@ public final class Transformer {
         this.minimum = minimum;
     }
 
-    public byte[] transform(final byte[] classBytes) {
-        final int poolSize = readUnsignedShort(classBytes, POOL_SIZE_INDEX);
+    /**
+     * Transforms class byte code to new class byte code if mapping was applied otherwise returns original class byte code.
+     *
+     * @param clazz class byte code to be investigated if mapping should be applied
+     * @return either original class byte code if mapping wasn't applied or modified class byte code if mapping was applied
+     */
+    public byte[] transform(final byte[] clazz) {
+        final int poolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
         int position = POOL_CONTENT_INDEX;
-        final int utf8ItemsCount = countUtf8Items(classBytes);
+        final int utf8ItemsCount = countUtf8Items(clazz);
         List<int[]> patches = null;
         byte tag;
         int byteArrayLength;
         int diffInBytes = 0;
         int[] patchInfo;
         for (int i = 1; i < poolSize; i++) {
-            tag = classBytes[position++];
+            tag = clazz[position++];
             if (tag == UTF8) {
-                byteArrayLength = readUnsignedShort(classBytes, position);
+                byteArrayLength = readUnsignedShort(clazz, position);
                 position += 2;
-                patchInfo = getPatch(classBytes, position, position + byteArrayLength);
+                patchInfo = getPatch(clazz, position, position + byteArrayLength);
                 if (patchInfo != null) {
                     if (patches == null) {
                         patches = new ArrayList<>(utf8ItemsCount);
@@ -112,10 +118,10 @@ public final class Transformer {
             }
         }
 
-        if (patches == null) return classBytes;
+        if (patches == null) return clazz;
 
-        final byte[] retVal = new byte[classBytes.length + diffInBytes];
-        System.arraycopy(classBytes, 0, retVal, 0, 10); // magic, versions, constant pool size
+        final byte[] retVal = new byte[clazz.length + diffInBytes];
+        System.arraycopy(clazz, 0, retVal, 0, 10); // magic, versions, constant pool size
         final Iterator<int[]> it = patches.iterator();
         int[] replacements;
         int oldClassBytePosition = 10, newClassBytePosition = 10;
@@ -128,11 +134,11 @@ public final class Transformer {
             } else {
                 // copy all till start of next utf8 item
                 copyLength = replacements[0] - oldClassBytePosition;
-                System.arraycopy(classBytes, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
+                System.arraycopy(clazz, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
                 oldClassBytePosition += copyLength;
                 newClassBytePosition += copyLength;
                 // patch utf8 length
-                diff = readUnsignedShort(classBytes, oldClassBytePosition - 2);
+                diff = readUnsignedShort(clazz, oldClassBytePosition - 2);
                 diff += replacements[1];
                 writeUnsignedShort(retVal, newClassBytePosition - 2, diff);
                 // apply replacements
@@ -142,7 +148,7 @@ public final class Transformer {
                     replacementPosition = replacements[i] & 0xFF;
                     // copy till begin of patch
                     copyLength = replacementPosition - oldClassBytePosition;
-                    System.arraycopy(classBytes, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
+                    System.arraycopy(clazz, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
                     oldClassBytePosition += copyLength;
                     newClassBytePosition += copyLength;
                     // real patch
@@ -152,7 +158,7 @@ public final class Transformer {
                 }
             }
         }
-        System.arraycopy(classBytes, oldClassBytePosition, retVal, newClassBytePosition, classBytes.length - oldClassBytePosition);
+        System.arraycopy(clazz, oldClassBytePosition, retVal, newClassBytePosition, clazz.length - oldClassBytePosition);
         return retVal;
     }
 
