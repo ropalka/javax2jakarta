@@ -121,6 +121,14 @@ public final class Transformer {
         return patches == null ? clazz : applyPatches(clazz, diffInBytes, patches);
     }
 
+    /**
+     * Returns modified class byte code with patches applied.
+     *
+     * @param clazz original class byte code
+     * @param diffInBytes difference in bytes compared with original class byte code
+     * @param patches patches to apply
+     * @return modified class byte code with patches applied
+     */
     private byte[] applyPatches(final byte[] clazz, final int diffInBytes, final List<int[]> patches) {
         final byte[] retVal = new byte[clazz.length + diffInBytes];
         // copy magic, version and constant pool size
