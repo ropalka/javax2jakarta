@@ -83,31 +83,31 @@ public final class Transformer {
     public byte[] transform(final byte[] clazz) {
         final int poolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
         int position = POOL_CONTENT_INDEX;
-        final int utf8ItemsCount = countUtf8Items(clazz);
-        List<int[]> patches = null;
         byte tag;
-        int byteArrayLength;
+        int utf8Length;
         int diffInBytes = 0;
+        List<int[]> patches = null;
         int[] patchInfo;
+
         for (int i = 1; i < poolSize; i++) {
             tag = clazz[position++];
             if (tag == UTF8) {
-                byteArrayLength = readUnsignedShort(clazz, position);
+                utf8Length = readUnsignedShort(clazz, position);
                 position += 2;
-                patchInfo = getPatch(clazz, position, position + byteArrayLength);
+                patchInfo = getPatch(clazz, position, position + utf8Length);
                 if (patchInfo != null) {
                     if (patches == null) {
-                        patches = new ArrayList<>(utf8ItemsCount);
+                        patches = new ArrayList<>(countUtf8Items(clazz));
                     }
                     diffInBytes += patchInfo[1];
                     patches.add(patchInfo);
                 }
-                position += byteArrayLength;
+                position += utf8Length;
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
                 position += 2;
             } else if (tag == LONG || tag == DOUBLE) {
                 position += 8;
-                i++; // see JVM specification
+                i++;
             } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
                        tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
                 position += 4;
@@ -118,10 +118,13 @@ public final class Transformer {
             }
         }
 
-        if (patches == null) return clazz;
+        return patches == null ? clazz : applyPatches(clazz, diffInBytes, patches);
+    }
 
+    private byte[] applyPatches(final byte[] clazz, final int diffInBytes, final List<int[]> patches) {
         final byte[] retVal = new byte[clazz.length + diffInBytes];
-        System.arraycopy(clazz, 0, retVal, 0, 10); // magic, versions, constant pool size
+        // copy magic, version and constant pool size
+        System.arraycopy(clazz, 0, retVal, 0, POOL_CONTENT_INDEX);
         final Iterator<int[]> it = patches.iterator();
         int[] replacements;
         int oldClassBytePosition = 10, newClassBytePosition = 10;
