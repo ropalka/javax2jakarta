@@ -155,7 +155,7 @@ public final class Transformer {
                 if (mappingIndex == 0) break;
                 patchOffset = patch[i] & 0xFF;
                 // copy till begin of patch
-                length = patchOffset - oldClassOffset;
+                length = patchOffset - (oldClassOffset - patch[0]);
                 System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
                 oldClassOffset += length;
                 newClassOffset += length;
@@ -219,7 +219,7 @@ public final class Transformer {
                         retVal = new int[((limit - i) / minimum) + 2];
                         retVal[0] = offset;
                     }
-                    retVal[patchIndex++] = mappingIndex << 16 | i;
+                    retVal[patchIndex++] = mappingIndex << 16 | (i - offset);
                     retVal[1] += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
                     i += mappingFrom[j].length - 1;
                     break;
