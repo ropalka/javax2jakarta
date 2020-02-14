@@ -151,9 +151,9 @@ public final class Transformer {
             writeUnsignedShort(newClass, newClassOffset - 2, diffInBytes);
             // apply utf8 info patches
             for (int i = 2; i < patch.length; i++) {
-                mappingIndex = patch[i] >> 16;
+                mappingIndex = patch[i] >>> 16;
                 if (mappingIndex == 0) break;
-                patchOffset = patch[i] & 0xFF;
+                patchOffset = patch[i] & 0xFFFF;
                 // copy till begin of patch
                 length = patchOffset - (oldClassOffset - patch[0]);
                 System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
