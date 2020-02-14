@@ -215,7 +215,7 @@ final class ClassFileUtils {
                 index += 3;
             } else if (tag == LONG || tag == DOUBLE) {
                 index += 8;
-                i++; // see JVM specification
+                i++;
             } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
                        tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
                 index += 4;

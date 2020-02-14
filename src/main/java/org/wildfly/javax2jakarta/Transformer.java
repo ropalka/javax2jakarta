@@ -87,20 +87,20 @@ public final class Transformer {
         int utf8Length;
         int diffInBytes = 0;
         List<int[]> patches = null;
-        int[] patchInfo;
+        int[] patch;
 
         for (int i = 1; i < poolSize; i++) {
             tag = clazz[position++];
             if (tag == UTF8) {
                 utf8Length = readUnsignedShort(clazz, position);
                 position += 2;
-                patchInfo = getPatch(clazz, position, position + utf8Length);
-                if (patchInfo != null) {
+                patch = getPatch(clazz, position, position + utf8Length);
+                if (patch != null) {
                     if (patches == null) {
                         patches = new ArrayList<>(countUtf8Items(clazz));
                     }
-                    diffInBytes += patchInfo[1];
-                    patches.add(patchInfo);
+                    diffInBytes += patch[1];
+                    patches.add(patch);
                 }
                 position += utf8Length;
             } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
@@ -118,59 +118,57 @@ public final class Transformer {
             }
         }
 
-        return patches == null ? clazz : applyPatches(clazz, diffInBytes, patches);
+        return patches == null ? clazz : applyPatches(clazz, clazz.length + diffInBytes, patches);
     }
 
     /**
      * Returns modified class byte code with patches applied.
      *
-     * @param clazz original class byte code
-     * @param diffInBytes difference in bytes compared with original class byte code
+     * @param oldClass original class byte code
+     * @param newClassSize count of bytes of new class byte code
      * @param patches patches to apply
      * @return modified class byte code with patches applied
      */
-    private byte[] applyPatches(final byte[] clazz, final int diffInBytes, final List<int[]> patches) {
-        final byte[] retVal = new byte[clazz.length + diffInBytes];
-        // copy magic, version and constant pool size
-        System.arraycopy(clazz, 0, retVal, 0, POOL_CONTENT_INDEX);
-        final Iterator<int[]> it = patches.iterator();
-        int[] replacements;
-        int oldClassBytePosition = 10, newClassBytePosition = 10;
-        int replacementIndex, replacementPosition, diff, copyLength;
+    private byte[] applyPatches(final byte[] oldClass, final int newClassSize, final List<int[]> patches) {
+        final byte[] newClass = new byte[newClassSize];
+        int oldClassOffset = 0, newClassOffset = 0;
+        int mappingIndex, patchOffset, diffInBytes, length;
 
-        while (it.hasNext()) {
-            replacements = it.next();
-            if (replacements == null) {
-                break;
-            } else {
-                // copy all till start of next utf8 item
-                copyLength = replacements[0] - oldClassBytePosition;
-                System.arraycopy(clazz, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
-                oldClassBytePosition += copyLength;
-                newClassBytePosition += copyLength;
-                // patch utf8 length
-                diff = readUnsignedShort(clazz, oldClassBytePosition - 2);
-                diff += replacements[1];
-                writeUnsignedShort(retVal, newClassBytePosition - 2, diff);
-                // apply replacements
-                for (int i = 2; i < replacements.length; i++) {
-                    replacementIndex = replacements[i] >> 16;
-                    if (replacementIndex == 0) break;
-                    replacementPosition = replacements[i] & 0xFF;
-                    // copy till begin of patch
-                    copyLength = replacementPosition - oldClassBytePosition;
-                    System.arraycopy(clazz, oldClassBytePosition, retVal, newClassBytePosition, copyLength);
-                    oldClassBytePosition += copyLength;
-                    newClassBytePosition += copyLength;
-                    // real patch
-                    System.arraycopy(mappingTo[replacementIndex], 0, retVal, newClassBytePosition, mappingTo[replacementIndex].length);
-                    oldClassBytePosition += mappingFrom[replacementIndex].length;
-                    newClassBytePosition += mappingTo[replacementIndex].length;
-                }
+        // First copy magic, version and constant pool size
+        System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, POOL_CONTENT_INDEX);
+        oldClassOffset = newClassOffset = POOL_CONTENT_INDEX;
+
+        for (int[] patch : patches) {
+            if (patch == null) break;
+            // copy till start of next utf8 item
+            length = patch[0] - oldClassOffset;
+            System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
+            oldClassOffset += length;
+            newClassOffset += length;
+            // patch utf8 item length
+            diffInBytes = readUnsignedShort(oldClass, oldClassOffset - 2);
+            diffInBytes += patch[1];
+            writeUnsignedShort(newClass, newClassOffset - 2, diffInBytes);
+            // apply utf8 info patches
+            for (int i = 2; i < patch.length; i++) {
+                mappingIndex = patch[i] >> 16;
+                if (mappingIndex == 0) break;
+                patchOffset = patch[i] & 0xFF;
+                // copy till begin of patch
+                length = patchOffset - oldClassOffset;
+                System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
+                oldClassOffset += length;
+                newClassOffset += length;
+                // apply patch
+                System.arraycopy(mappingTo[mappingIndex], 0, newClass, newClassOffset, mappingTo[mappingIndex].length);
+                oldClassOffset += mappingFrom[mappingIndex].length;
+                newClassOffset += mappingTo[mappingIndex].length;
             }
         }
-        System.arraycopy(clazz, oldClassBytePosition, retVal, newClassBytePosition, clazz.length - oldClassBytePosition);
-        return retVal;
+        // copy remaining class byte code
+        System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, oldClass.length - oldClassOffset);
+
+        return newClass;
     }
 
     /**
