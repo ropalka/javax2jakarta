@@ -21,6 +21,7 @@
  */
 package org.wildfly.javax2jakarta;
 
+import static java.lang.System.arraycopy;
 import static java.lang.Thread.currentThread;
 import static org.wildfly.javax2jakarta.ClassFileUtils.*;
 
@@ -32,7 +33,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -135,14 +135,14 @@ public final class Transformer {
         int mappingIndex, patchOffset, diffInBytes, length;
 
         // First copy magic, version and constant pool size
-        System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, POOL_CONTENT_INDEX);
+        arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, POOL_CONTENT_INDEX);
         oldClassOffset = newClassOffset = POOL_CONTENT_INDEX;
 
         for (int[] patch : patches) {
             if (patch == null) break;
             // copy till start of next utf8 item
             length = patch[0] - oldClassOffset;
-            System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
+            arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
             oldClassOffset += length;
             newClassOffset += length;
             // patch utf8 item length
@@ -156,17 +156,17 @@ public final class Transformer {
                 patchOffset = patch[i] & 0xFFFF;
                 // copy till begin of patch
                 length = patchOffset - (oldClassOffset - patch[0]);
-                System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
+                arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
                 oldClassOffset += length;
                 newClassOffset += length;
                 // apply patch
-                System.arraycopy(mappingTo[mappingIndex], 0, newClass, newClassOffset, mappingTo[mappingIndex].length);
+                arraycopy(mappingTo[mappingIndex], 0, newClass, newClassOffset, mappingTo[mappingIndex].length);
                 oldClassOffset += mappingFrom[mappingIndex].length;
                 newClassOffset += mappingTo[mappingIndex].length;
             }
         }
         // copy remaining class byte code
-        System.arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, oldClass.length - oldClassOffset);
+        arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, oldClass.length - oldClassOffset);
 
         return newClass;
     }
