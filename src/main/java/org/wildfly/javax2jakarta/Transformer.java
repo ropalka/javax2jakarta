@@ -245,6 +245,7 @@ public final class Transformer {
      * @author <a href="mailto:ropalka@redhat.com">Richard Opálka</a>
      */
     public static final class Builder {
+        private static final int MAX_MAPPINGS = 0xFFFF;
         private final Thread thread;
         private final Map<String, String> mapping;
         private boolean built;
@@ -261,7 +262,7 @@ public final class Transformer {
          * @param to string to be replaced with
          * @return this builder instance
          * @throws ConcurrentModificationException if builder instance is used by multiple threads
-         * @throws IllegalStateException if {@link #build()} have been already called
+         * @throws IllegalStateException if {@link #build()} have been already called or if mappings count surpasses value <code>65535</code>
          * @throws IllegalArgumentException if any method parameter is <code>null</code>
          * or if any method parameter equals to <code>empty string</code>
          * or if method parameters define identity mapping
@@ -279,6 +280,7 @@ public final class Transformer {
             for (String key : mapping.keySet()) {
                 if (key.contains(from) || from.contains(key)) throw new IllegalArgumentException();
             }
+            if (mapping.size() > MAX_MAPPINGS) throw new IllegalStateException();
             mapping.put(from, to);
             return this;
         }
