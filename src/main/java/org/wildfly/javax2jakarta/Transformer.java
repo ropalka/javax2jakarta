@@ -87,14 +87,14 @@ public final class Transformer {
      */
     public byte[] transform(final byte[] clazz) {
         final int[] constantPool = getConstantPool(clazz);
-        int position = POOL_CONTENT_INDEX;
+        int diffInBytes = 0, position, utf8Length;
         byte tag;
-        int utf8Length;
-        int diffInBytes = 0;
         List<int[]> patches = null;
         int[] patch;
 
         for (int i = 1; i < constantPool.length; i++) {
+            position = constantPool[i];
+            if (position == 0) continue;
             tag = clazz[position++];
             if (tag == UTF8) {
                 utf8Length = readUnsignedShort(clazz, position);
@@ -107,19 +107,6 @@ public final class Transformer {
                     diffInBytes += patch[0] & PATCH_MASK;
                     patches.add(patch);
                 }
-                position += utf8Length;
-            } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
-                position += 2;
-            } else if (tag == LONG || tag == DOUBLE) {
-                position += 8;
-                i++;
-            } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
-                       tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
-                position += 4;
-            } else if (tag == METHOD_HANDLE) {
-                position += 3;
-            } else {
-                throw new UnsupportedClassVersionError();
             }
         }
         return patches == null ? clazz : applyPatches(clazz, clazz.length + diffInBytes, constantPool, patches);
