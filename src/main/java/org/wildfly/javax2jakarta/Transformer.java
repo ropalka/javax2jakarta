@@ -221,8 +221,7 @@ public final class Transformer {
                     }
                     retVal[patchIndex++] = mappingIndex << 16 | (i - offset);
                     retVal[1] += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
-                    i += mappingFrom[j].length - 1;
-                    break;
+                    i += mappingFrom[j].length;
                 }
             }
         }
