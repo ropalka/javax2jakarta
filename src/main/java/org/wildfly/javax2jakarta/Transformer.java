@@ -35,6 +35,7 @@ import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * Class file transformer.
@@ -321,7 +322,15 @@ public final class Transformer {
             return;
         }
         // configure transformer
-        final Transformer t = Transformer.newInstance().addMapping("javax/", "jakarta/").addMapping("javax.", "jakarta.").build();
+        final Properties defaultMapping = new Properties();
+        defaultMapping.load(Transformer.class.getResourceAsStream("/default.mapping"));
+        String to = null;
+        Transformer.Builder builder = Transformer.newInstance();
+        for (String from : defaultMapping.stringPropertyNames()) {
+            to = defaultMapping.getProperty(from);
+            builder.addMapping(from, to);
+        }
+        final Transformer t = builder.build();
         // get original class content
         final ByteArrayOutputStream targetBAOS = new ByteArrayOutputStream();
         final Path source = Paths.get(args[0]);
