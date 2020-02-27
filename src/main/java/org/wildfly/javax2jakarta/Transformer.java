@@ -335,7 +335,7 @@ public final class Transformer {
             return;
         }
         // configure transformer
-        final Transformer t = Transformer.newInstance().addMapping("javax/", "jakarta/").build();
+        final Transformer t = Transformer.newInstance().addMapping("javax/", "jakarta/").addMapping("javax.", "jakarta.").build();
         // get original class content
         final ByteArrayOutputStream targetBAOS = new ByteArrayOutputStream();
         final Path source = Paths.get(args[0]);
