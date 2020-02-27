@@ -45,6 +45,11 @@ import java.util.Map;
 public final class Transformer {
 
     /**
+     * Patch info mask.
+     */
+    private static final int PATCH_MASK = 0xFFFF;
+
+    /**
      * Represents strings we are searching for in <code>CONSTANT_Utf8_info</code> structures (encoded in modified UTF-8).
      * Mapping on index <code>zero</code> is undefined. Mappings are defined from index <code>one</code>.
      */
@@ -94,12 +99,12 @@ public final class Transformer {
             if (tag == UTF8) {
                 utf8Length = readUnsignedShort(clazz, position);
                 position += 2;
-                patch = getPatch(clazz, position, position + utf8Length);
+                patch = getPatch(clazz, position, position + utf8Length, i);
                 if (patch != null) {
                     if (patches == null) {
                         patches = new ArrayList<>(countUtf8Items(clazz));
                     }
-                    diffInBytes += patch[1];
+                    diffInBytes += patch[1] & PATCH_MASK;
                     patches.add(patch);
                 }
                 position += utf8Length;
@@ -117,7 +122,6 @@ public final class Transformer {
                 throw new UnsupportedClassVersionError();
             }
         }
-
         return patches == null ? clazz : applyPatches(clazz, clazz.length + diffInBytes, patches);
     }
 
@@ -132,7 +136,7 @@ public final class Transformer {
     private byte[] applyPatches(final byte[] oldClass, final int newClassSize, final List<int[]> patches) {
         final byte[] newClass = new byte[newClassSize];
         int oldClassOffset = 0, newClassOffset = 0;
-        int mappingIndex, patchOffset, diffInBytes, length;
+        int length, mappingIndex, oldUtf8ItemLength, patchOffset;
 
         // First copy magic, version and constant pool size
         arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, POOL_CONTENT_INDEX);
@@ -146,14 +150,13 @@ public final class Transformer {
             oldClassOffset += length;
             newClassOffset += length;
             // patch utf8 item length
-            diffInBytes = readUnsignedShort(oldClass, oldClassOffset - 2);
-            diffInBytes += patch[1];
-            writeUnsignedShort(newClass, newClassOffset - 2, diffInBytes);
+            oldUtf8ItemLength = readUnsignedShort(oldClass, oldClassOffset - 2);
+            writeUnsignedShort(newClass, newClassOffset - 2, oldUtf8ItemLength + (patch[1] & PATCH_MASK));
             // apply utf8 info patches
             for (int i = 2; i < patch.length; i++) {
                 mappingIndex = patch[i] >>> 16;
                 if (mappingIndex == 0) break;
-                patchOffset = patch[i] & 0xFFFF;
+                patchOffset = patch[i] & PATCH_MASK;
                 // copy till begin of patch
                 length = patchOffset - (oldClassOffset - patch[0]);
                 arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
@@ -164,7 +167,13 @@ public final class Transformer {
                 oldClassOffset += mappingFrom[mappingIndex].length;
                 newClassOffset += mappingTo[mappingIndex].length;
             }
+            // copy remaining class byte code till utf8 item end
+            length = patch[0] + oldUtf8ItemLength - oldClassOffset;
+            arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
+            oldClassOffset += length;
+            newClassOffset += length;
         }
+
         // copy remaining class byte code
         arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, oldClass.length - oldClassOffset);
 
@@ -176,21 +185,24 @@ public final class Transformer {
      * Every <code>patch info</code> has the following format:
      * <p>
      *     <pre>
-     *         +-----------+
-     *         | integer 0 | byte position of beginning of <code>CONSTANT_Utf8_info</code> structure in original class file
-     *         +-----------+
-     *         | integer 1 | <code>CONSTANT_Utf8_info</code> structure difference in bytes after applied patches
-     *         +-----------+
-     *         | integer 2 | first two bytes hold non-zero mapping index in mapping tables of 1-st applied patch
-     *         |           | last two bytes hold index of 1-st patch start inside original <code>CONSTANT_Utf8_info</code> structure
-     *         +-----------+
-     *         | integer 2 | first two bytes hold non-zero mapping index in mapping tables of 2-nd applied patch
-     *         |           | last two bytes hold index of 2-nd patch start inside original <code>CONSTANT_Utf8_info</code> structure
-     *         +-----------+
-     *         |    ...    | etc
-     *         +-----------+
-     *         | integer N | first two bytes of mapping index equal to zero indicate <code>patch info</code> structure end
-     *         +-----------+
+     *        +----+-----------+
+     *        | ME | integer 0 | byte position of beginning of <code>CONSTANT_Utf8_info</code> structure in original class file
+     *        | TA +-----------+
+     *        | DA | integer 1 | first two bytes hold <code>Constant_Utf8_info</code> index inside <code>constant pool</code> table
+     *        | TA |           | second two bytes hold <code>CONSTANT_Utf8_info</code> structure difference in bytes after applied patches
+     *        +----+-----------+
+     *        | DA | integer 2 | first two bytes hold non-zero mapping index in mapping tables of 1-st applied patch
+     *        | TA |           | last two bytes hold index of 1-st patch start inside original <code>CONSTANT_Utf8_info</code> structure
+     *        +----+-----------+
+     *        | DA | integer 3 | first two bytes hold non-zero mapping index in mapping tables of 2-nd applied patch
+     *        | TA |           | last two bytes hold index of 2-nd patch start inside original <code>CONSTANT_Utf8_info</code> structure
+     *        +----+-----------+
+     *        | DA | integer 4 | etc
+     *        | TA |    ...    |
+     *        +----+-----------+
+     *        | DA | integer N | first two bytes of mapping index equal to zero indicate premature <code>patch info</code> structure end
+     *        | TA |           |
+     *        +----+-----------+
      *     </pre>
      * </p>
      *
@@ -199,7 +211,7 @@ public final class Transformer {
      * @param limit first index not belonging to investigated <code>CONSTANT_Utf8_info</code> structure
      * @return
      */
-    private int[] getPatch(final byte[] clazz, final int offset, final int limit) {
+    private int[] getPatch(final byte[] clazz, final int offset, final int limit, final int poolIndex) {
         int[] retVal = null;
         int mappingIndex;
         int patchIndex = 2;
@@ -218,6 +230,7 @@ public final class Transformer {
                     if (retVal == null) {
                         retVal = new int[((limit - i) / minimum) + 2];
                         retVal[0] = offset;
+                        retVal[1] = poolIndex << 16;
                     }
                     retVal[patchIndex++] = mappingIndex << 16 | (i - offset);
                     retVal[1] += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
