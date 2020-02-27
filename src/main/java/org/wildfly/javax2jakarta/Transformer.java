@@ -86,7 +86,8 @@ public final class Transformer {
      * @return either original class byte code if mapping wasn't applied or modified class byte code if mapping was applied
      */
     public byte[] transform(final byte[] clazz) {
-        final int poolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
+        final int constantPoolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
+        final int[] constantPool = new int[constantPoolSize];
         int position = POOL_CONTENT_INDEX;
         byte tag;
         int utf8Length;
@@ -94,7 +95,8 @@ public final class Transformer {
         List<int[]> patches = null;
         int[] patch;
 
-        for (int i = 1; i < poolSize; i++) {
+        for (int i = 1; i < constantPoolSize; i++) {
+            constantPool[i] = position;
             tag = clazz[position++];
             if (tag == UTF8) {
                 utf8Length = readUnsignedShort(clazz, position);
@@ -104,7 +106,7 @@ public final class Transformer {
                     if (patches == null) {
                         patches = new ArrayList<>(countUtf8Items(clazz));
                     }
-                    diffInBytes += patch[1] & PATCH_MASK;
+                    diffInBytes += patch[0] & PATCH_MASK;
                     patches.add(patch);
                 }
                 position += utf8Length;
@@ -122,7 +124,7 @@ public final class Transformer {
                 throw new UnsupportedClassVersionError();
             }
         }
-        return patches == null ? clazz : applyPatches(clazz, clazz.length + diffInBytes, patches);
+        return patches == null ? clazz : applyPatches(clazz, clazz.length + diffInBytes, constantPool, patches);
     }
 
     /**
@@ -130,13 +132,14 @@ public final class Transformer {
      *
      * @param oldClass original class byte code
      * @param newClassSize count of bytes of new class byte code
+     * @param oldClassConstantPool pointers to old class constant pool items
      * @param patches patches to apply
      * @return modified class byte code with patches applied
      */
-    private byte[] applyPatches(final byte[] oldClass, final int newClassSize, final List<int[]> patches) {
+    private byte[] applyPatches(final byte[] oldClass, final int newClassSize, final int[] oldClassConstantPool, final List<int[]> patches) {
         final byte[] newClass = new byte[newClassSize];
         int oldClassOffset = 0, newClassOffset = 0;
-        int length, mappingIndex, oldUtf8ItemLength, patchOffset;
+        int length, mappingIndex, oldUtf8ItemBytesSectionOffset, oldUtf8ItemLength, patchOffset;
 
         // First copy magic, version and constant pool size
         arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, POOL_CONTENT_INDEX);
@@ -144,21 +147,22 @@ public final class Transformer {
 
         for (int[] patch : patches) {
             if (patch == null) break;
-            // copy till start of next utf8 item
-            length = patch[0] - oldClassOffset;
+            oldUtf8ItemBytesSectionOffset = oldClassConstantPool[patch[0] >>> 16] + 3;
+            // copy till start of next utf8 item bytes section
+            length = oldUtf8ItemBytesSectionOffset - oldClassOffset;
             arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
             oldClassOffset += length;
             newClassOffset += length;
             // patch utf8 item length
             oldUtf8ItemLength = readUnsignedShort(oldClass, oldClassOffset - 2);
-            writeUnsignedShort(newClass, newClassOffset - 2, oldUtf8ItemLength + (patch[1] & PATCH_MASK));
-            // apply utf8 info patches
-            for (int i = 2; i < patch.length; i++) {
+            writeUnsignedShort(newClass, newClassOffset - 2, oldUtf8ItemLength + (patch[0] & PATCH_MASK));
+            // apply utf8 info bytes section patches
+            for (int i = 1; i < patch.length; i++) {
                 mappingIndex = patch[i] >>> 16;
                 if (mappingIndex == 0) break;
                 patchOffset = patch[i] & PATCH_MASK;
                 // copy till begin of patch
-                length = patchOffset - (oldClassOffset - patch[0]);
+                length = patchOffset - (oldClassOffset - oldUtf8ItemBytesSectionOffset);
                 arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
                 oldClassOffset += length;
                 newClassOffset += length;
@@ -168,7 +172,7 @@ public final class Transformer {
                 newClassOffset += mappingTo[mappingIndex].length;
             }
             // copy remaining class byte code till utf8 item end
-            length = patch[0] + oldUtf8ItemLength - oldClassOffset;
+            length = oldUtf8ItemBytesSectionOffset + oldUtf8ItemLength - oldClassOffset;
             arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
             oldClassOffset += length;
             newClassOffset += length;
@@ -185,24 +189,22 @@ public final class Transformer {
      * Every <code>patch info</code> has the following format:
      * <p>
      *     <pre>
-     *        +----+-----------+
-     *        | ME | integer 0 | byte position of beginning of <code>CONSTANT_Utf8_info</code> structure in original class file
-     *        | TA +-----------+
-     *        | DA | integer 1 | first two bytes hold <code>Constant_Utf8_info</code> index inside <code>constant pool</code> table
-     *        | TA |           | second two bytes hold <code>CONSTANT_Utf8_info</code> structure difference in bytes after applied patches
-     *        +----+-----------+
-     *        | DA | integer 2 | first two bytes hold non-zero mapping index in mapping tables of 1-st applied patch
-     *        | TA |           | last two bytes hold index of 1-st patch start inside original <code>CONSTANT_Utf8_info</code> structure
-     *        +----+-----------+
-     *        | DA | integer 3 | first two bytes hold non-zero mapping index in mapping tables of 2-nd applied patch
-     *        | TA |           | last two bytes hold index of 2-nd patch start inside original <code>CONSTANT_Utf8_info</code> structure
-     *        +----+-----------+
-     *        | DA | integer 4 | etc
-     *        | TA |    ...    |
-     *        +----+-----------+
-     *        | DA | integer N | first two bytes of mapping index equal to zero indicate premature <code>patch info</code> structure end
-     *        | TA |           |
-     *        +----+-----------+
+     *        +-----------+
+     *        | integer 0 | first two bytes hold <code>Constant_Utf8_info</code> index inside <code>constant pool</code> table
+     *        |           | second two bytes hold <code>CONSTANT_Utf8_info</code> structure difference in bytes after applied patches
+     *        +-----------+
+     *        | integer 1 | first two bytes hold non-zero mapping index in mapping tables of 1-st applied patch
+     *        |           | last two bytes hold index of 1-st patch start inside bytes section of original <code>CONSTANT_Utf8_info</code> structure
+     *        +-----------+
+     *        | integer 2 | first two bytes hold non-zero mapping index in mapping tables of 2-nd applied patch
+     *        |           | last two bytes hold index of 2-nd patch start inside bytes section of original <code>CONSTANT_Utf8_info</code> structure
+     *        +-----------+
+     *        |    ...    | etc
+     *        |           |
+     *        +-----------+
+     *        | integer N | first two bytes of mapping index equal to zero indicate premature <code>patch info</code> structure end
+     *        |           |
+     *        +-----------+
      *     </pre>
      * </p>
      *
@@ -214,7 +216,7 @@ public final class Transformer {
     private int[] getPatch(final byte[] clazz, final int offset, final int limit, final int poolIndex) {
         int[] retVal = null;
         int mappingIndex;
-        int patchIndex = 2;
+        int patchIndex = 1;
 
         for (int i = offset; i <= limit - minimum; i++) {
             for (int j = 1; j < mappingFrom.length; j++) {
@@ -228,12 +230,11 @@ public final class Transformer {
                 }
                 if (mappingIndex != 0) {
                     if (retVal == null) {
-                        retVal = new int[((limit - i) / minimum) + 2];
-                        retVal[0] = offset;
-                        retVal[1] = poolIndex << 16;
+                        retVal = new int[((limit - i) / minimum) + 1];
+                        retVal[0] = poolIndex << 16;
                     }
                     retVal[patchIndex++] = mappingIndex << 16 | (i - offset);
-                    retVal[1] += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
+                    retVal[0] += mappingTo[mappingIndex].length - mappingFrom[mappingIndex].length;
                     i += mappingFrom[j].length;
                 }
             }
