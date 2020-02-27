@@ -137,6 +137,42 @@ final class ClassFileUtils {
     }
 
     /**
+     * Returns pointers to <code>class constant pool items</code>.
+     *
+     * @param clazz class to create array of constant pool item pointers for
+     * @return array of constant pool item pointers. Every <code>zero</code> inside it represent <code>undefined</code> value.
+     */
+    static int[] getConstantPool(final byte[] clazz) {
+        final int constantPoolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
+        final int[] retVal = new int[constantPoolSize];
+        int position = POOL_CONTENT_INDEX;
+        byte tag;
+        int utf8Length;
+
+        for (int i = 1; i < constantPoolSize; i++) {
+            retVal[i] = position;
+            tag = clazz[position++];
+            if (tag == UTF8) {
+                utf8Length = readUnsignedShort(clazz, position);
+                position += 2 + utf8Length;
+            } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
+                position += 2;
+            } else if (tag == LONG || tag == DOUBLE) {
+                position += 8;
+                i++;
+            } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
+                       tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
+                position += 4;
+            } else if (tag == METHOD_HANDLE) {
+                position += 3;
+            } else {
+                throw new UnsupportedClassVersionError();
+            }
+        }
+        return retVal;
+    }
+
+    /**
      * Decodes modified UTF-8 to string.
      *
      * @param clazz class bytes
@@ -191,37 +227,18 @@ final class ClassFileUtils {
     }
 
     /**
-     * Counts how many <code>CONSTANT_Utf8_info</code> structures are present in class constant pool.
+     * Counts how many <code>CONSTANT_Utf8_info</code> structures are present in the class constant pool.
      *
      * @param clazz class bytes
+     * @param constantPool pointers to class constant pool
      * @return <code>CONSTANT_Utf8_info</code> structures count in class constant pool
      */
-    static int countUtf8Items(final byte[] clazz) {
-        final int poolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
+    static int countUtf8Items(final byte[] clazz, final int[] constantPool) {
         int retVal = 0;
-        int index = POOL_CONTENT_INDEX;
-        int utf8Length;
-        byte tag;
 
-        for (int i = 1; i < poolSize; i++) {
-            tag = clazz[index++];
-            if (tag == UTF8) {
-                retVal++;
-                utf8Length = readUnsignedShort(clazz, index);
-                index += (utf8Length + 2);
-            } else if (tag == CLASS || tag == STRING || tag == METHOD_TYPE || tag == MODULE || tag == PACKAGE) {
-                index += 2;
-            } else if (tag == METHOD_HANDLE) {
-                index += 3;
-            } else if (tag == LONG || tag == DOUBLE) {
-                index += 8;
-                i++;
-            } else if (tag == INTEGER || tag == FLOAT || tag == FIELD_REF || tag == METHOD_REF ||
-                       tag == INTERFACE_METHOD_REF || tag == NAME_AND_TYPE || tag == DYNAMIC || tag == INVOKE_DYNAMIC) {
-                index += 4;
-            } else {
-                throw new UnsupportedClassVersionError();
-            }
+        for (int i = 1; i < constantPool.length; i++) {
+            if (constantPool[i] == 0) continue;
+            if (UTF8 == clazz[constantPool[i]]) retVal++;
         }
 
         return retVal;

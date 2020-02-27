@@ -86,8 +86,7 @@ public final class Transformer {
      * @return either original class byte code if mapping wasn't applied or modified class byte code if mapping was applied
      */
     public byte[] transform(final byte[] clazz) {
-        final int constantPoolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
-        final int[] constantPool = new int[constantPoolSize];
+        final int[] constantPool = getConstantPool(clazz);
         int position = POOL_CONTENT_INDEX;
         byte tag;
         int utf8Length;
@@ -95,8 +94,7 @@ public final class Transformer {
         List<int[]> patches = null;
         int[] patch;
 
-        for (int i = 1; i < constantPoolSize; i++) {
-            constantPool[i] = position;
+        for (int i = 1; i < constantPool.length; i++) {
             tag = clazz[position++];
             if (tag == UTF8) {
                 utf8Length = readUnsignedShort(clazz, position);
@@ -104,7 +102,7 @@ public final class Transformer {
                 patch = getPatch(clazz, position, position + utf8Length, i);
                 if (patch != null) {
                     if (patches == null) {
-                        patches = new ArrayList<>(countUtf8Items(clazz));
+                        patches = new ArrayList<>(countUtf8Items(clazz, constantPool));
                     }
                     diffInBytes += patch[0] & PATCH_MASK;
                     patches.add(patch);
