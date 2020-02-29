@@ -137,10 +137,13 @@ final class ClassFileUtils {
     }
 
     /**
-     * Returns pointers to <code>class constant pool items</code>.
+     * Returns pointers to the <code>class constant pool items</code> indexed from 1 till end of array.
+     * Every <code>zero</code> inside it represent <code>undefined</code> value.
+     * One special field in this array is value at position <code>zero</code>.
+     * This value holds pointer to the end of the class constant pool.
      *
      * @param clazz class to create array of constant pool item pointers for
-     * @return array of constant pool item pointers. Every <code>zero</code> inside it represent <code>undefined</code> value.
+     * @return array of constant pool item pointers
      */
     static int[] getConstantPool(final byte[] clazz) {
         final int constantPoolSize = readUnsignedShort(clazz, POOL_SIZE_INDEX);
@@ -169,6 +172,7 @@ final class ClassFileUtils {
                 throw new UnsupportedClassVersionError();
             }
         }
+        retVal[0] = position;
         return retVal;
     }
 

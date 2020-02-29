@@ -51,6 +51,11 @@ public final class Transformer {
     private static final int PATCH_MASK = 0xFFFF;
 
     /**
+     * Debugging support.
+     */
+    private static final boolean DEBUG = Boolean.getBoolean(Transformer.class.getName() + ".debug");
+
+    /**
      * Represents strings we are searching for in <code>CONSTANT_Utf8_info</code> structures (encoded in modified UTF-8).
      * Mapping on index <code>zero</code> is undefined. Mappings are defined from index <code>one</code>.
      */
@@ -110,7 +115,27 @@ public final class Transformer {
                 }
             }
         }
-        return patches == null ? clazz : applyPatches(clazz, clazz.length + diffInBytes, constantPool, patches);
+        String thisClass = null;
+        if (DEBUG && patches != null) {
+            final int thisClassPoolIndex = readUnsignedShort(clazz, constantPool[0] + 2);
+            final int thisClassUtf8Position = constantPool[readUnsignedShort(clazz, constantPool[thisClassPoolIndex] + 1)];
+            final int thisClassUtf8Length = readUnsignedShort(clazz, thisClassUtf8Position + 1);
+            if (DEBUG) {
+                synchronized (System.out) {
+                    thisClass = utf8ToString(clazz, thisClassUtf8Position + 3, thisClassUtf8Position + thisClassUtf8Length + 3);
+                    System.out.println("[" + currentThread() + "] Patching class " + thisClass + " - START");
+                }
+            }
+        }
+        try {
+            return patches == null ? clazz : applyPatches(clazz, clazz.length + diffInBytes, constantPool, patches);
+        } finally {
+            if (DEBUG && patches != null) {
+                synchronized (System.out) {
+                    System.out.println("[" + currentThread() + "] Patching class " + thisClass + " - END");
+                }
+            }
+        }
     }
 
     /**
@@ -126,6 +151,8 @@ public final class Transformer {
         final byte[] newClass = new byte[newClassSize];
         int oldClassOffset = 0, newClassOffset = 0;
         int length, mappingIndex, oldUtf8ItemBytesSectionOffset, oldUtf8ItemLength, patchOffset;
+        int debugOldUtf8ItemOffset = -1, debugNewUtf8ItemOffset = -1;
+        int debugOldUtf8ItemLength = -1, debugNewUtf8ItemLength = -1;
 
         // First copy magic, version and constant pool size
         arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, POOL_CONTENT_INDEX);
@@ -139,6 +166,10 @@ public final class Transformer {
             arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
             oldClassOffset += length;
             newClassOffset += length;
+            if (DEBUG) {
+                debugOldUtf8ItemOffset = oldClassOffset;
+                debugNewUtf8ItemOffset = newClassOffset;
+            }
             // patch utf8 item length
             oldUtf8ItemLength = readUnsignedShort(oldClass, oldClassOffset - 2);
             writeUnsignedShort(newClass, newClassOffset - 2, oldUtf8ItemLength + (patch[0] & PATCH_MASK));
@@ -162,6 +193,15 @@ public final class Transformer {
             arraycopy(oldClass, oldClassOffset, newClass, newClassOffset, length);
             oldClassOffset += length;
             newClassOffset += length;
+            if (DEBUG) {
+                synchronized (System.out) {
+                    System.out.println("[" + currentThread() + "] Patching UTF-8 constant pool item on position: " + (patch[1] >>> 16));
+                    debugOldUtf8ItemLength = readUnsignedShort(oldClass, debugOldUtf8ItemOffset - 2);
+                    System.out.println("[" + currentThread() + "] old value: " + utf8ToString(oldClass, debugOldUtf8ItemOffset, debugOldUtf8ItemOffset + debugOldUtf8ItemLength));
+                    debugNewUtf8ItemLength = readUnsignedShort(newClass, debugNewUtf8ItemOffset - 2);
+                    System.out.println("[" + currentThread() + "] new value: " + utf8ToString(newClass, debugNewUtf8ItemOffset, debugNewUtf8ItemOffset + debugNewUtf8ItemLength));
+                }
+            }
         }
 
         // copy remaining class byte code
