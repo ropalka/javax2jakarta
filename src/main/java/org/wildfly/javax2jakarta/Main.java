@@ -23,6 +23,7 @@ package org.wildfly.javax2jakarta;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -35,15 +36,41 @@ import java.util.Properties;
  */
 public final class Main {
 
-    public static void main(final String... args) throws Exception {
-        if (args.length != 2) {
-            System.out.println("Usage: " + Main.class.getName() + " source.class target.class");
-            System.out.println("       (to transform a class)");
-            System.out.println("   or  " + Main.class.getName() + " source.jar target.jar");
-            System.out.println("       (to transform a jar file)");
-            return;
+    private static final String CLASS_FILE_EXT = ".class";
+    private static final String JAR_FILE_EXT = ".jar";
+
+    public static void main(final String... args) throws IOException {
+        final String sourceFile = args.length == 2 ? getFileName(args[0]) : "";
+        final String targetFile = args.length == 2 ? getFileName(args[1]) : "";
+        if (sourceFile.endsWith(CLASS_FILE_EXT) && targetFile.endsWith(CLASS_FILE_EXT)) {
+            transformClassFile(sourceFile, targetFile);
+        } else if (sourceFile.endsWith(JAR_FILE_EXT) && targetFile.endsWith(JAR_FILE_EXT)) {
+            transformJarFile(sourceFile, targetFile);
+        } else {
+            printUsage();
         }
-        // configure transformer
+    }
+
+    private static void transformClassFile(final String inClassFile, final String outClassFile) throws IOException {
+        final Transformer t = getTransformer();
+        // get original class content
+        final ByteArrayOutputStream targetBAOS = new ByteArrayOutputStream();
+        final Path source = Paths.get(inClassFile);
+        Files.copy(source, targetBAOS);
+        final byte[] sourceBytes = targetBAOS.toByteArray();
+        // transform class
+        final byte[] targetBytes = t.transform(sourceBytes);
+        // write modified class content
+        final ByteArrayInputStream sourceBAIS = new ByteArrayInputStream(targetBytes);
+        final Path target = Paths.get(outClassFile);
+        Files.copy(sourceBAIS, target);
+    }
+
+    private static void transformJarFile(final String inJarFile, final String outJarFile) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    private static Transformer getTransformer() throws IOException {
         final Properties defaultMapping = new Properties();
         defaultMapping.load(Transformer.class.getResourceAsStream("/default.mapping"));
         String to;
@@ -52,18 +79,20 @@ public final class Main {
             to = defaultMapping.getProperty(from);
             builder.addMapping(from, to);
         }
-        final Transformer t = builder.build();
-        // get original class content
-        final ByteArrayOutputStream targetBAOS = new ByteArrayOutputStream();
-        final Path source = Paths.get(args[0]);
-        Files.copy(source, targetBAOS);
-        final byte[] sourceBytes = targetBAOS.toByteArray();
-        // transform class
-        final byte[] targetBytes = t.transform(sourceBytes);
-        // write modified class content
-        final ByteArrayInputStream sourceBAIS = new ByteArrayInputStream(targetBytes);
-        final Path target = Paths.get(args[1]);
-        Files.copy(sourceBAIS, target);
+        return builder.build();
+    }
+
+    private static String getFileName(final String arg) {
+        if (arg == null || "".equals(arg)) return "";
+        return arg.replace("\\", "/").replaceAll("//", "/");
+    }
+
+    private static void printUsage() {
+        System.out.println("Usage: " + Main.class.getName() + " source.class target.class");
+        System.out.println("       (to transform a class)");
+        System.out.println("   or  " + Main.class.getName() + " source.jar target.jar");
+        System.out.println("       (to transform a jar file)");
+        System.exit(1);
     }
 
 }
