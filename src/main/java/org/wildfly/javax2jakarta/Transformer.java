@@ -189,7 +189,7 @@ public final class Transformer {
             newClassOffset += length;
             if (DEBUG) {
                 synchronized (System.out) {
-                    System.out.println("[" + currentThread() + "] Patching UTF-8 constant pool item on position: " + (patch[1] >>> 16));
+                    System.out.println("[" + currentThread() + "] Patching UTF-8 constant pool item on position: " + (patch[0] >>> 16));
                     debugOldUtf8ItemLength = readUnsignedShort(oldClass, debugOldUtf8ItemOffset - 2);
                     System.out.println("[" + currentThread() + "] old value: " + utf8ToString(oldClass, debugOldUtf8ItemOffset, debugOldUtf8ItemOffset + debugOldUtf8ItemLength));
                     debugNewUtf8ItemLength = readUnsignedShort(newClass, debugNewUtf8ItemOffset - 2);
