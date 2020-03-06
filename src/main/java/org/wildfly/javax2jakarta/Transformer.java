@@ -109,6 +109,9 @@ public final class Transformer {
                 }
             }
         }
+        if (diffInBytes > 0 && Integer.MAX_VALUE - diffInBytes < clazz.length) {
+            throw new UnsupportedOperationException("Couldn't patch class file. The transformed class file would exceed max allowed size " + Integer.MAX_VALUE + " bytes");
+        }
         String thisClass = null;
         if (DEBUG && patches != null) {
             final int thisClassPoolIndex = readUnsignedShort(clazz, constantPool[0] + 2);

@@ -21,12 +21,10 @@
  */
 package org.wildfly.javax2jakarta;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Properties;
 
 /**
@@ -40,33 +38,50 @@ public final class Main {
     private static final String JAR_FILE_EXT = ".jar";
 
     public static void main(final String... args) throws IOException {
-        final String sourceFile = args.length == 2 ? getFileName(args[0]) : "";
-        final String targetFile = args.length == 2 ? getFileName(args[1]) : "";
-        if (sourceFile.endsWith(CLASS_FILE_EXT) && targetFile.endsWith(CLASS_FILE_EXT)) {
-            transformClassFile(sourceFile, targetFile);
-        } else if (sourceFile.endsWith(JAR_FILE_EXT) && targetFile.endsWith(JAR_FILE_EXT)) {
-            transformJarFile(sourceFile, targetFile);
-        } else {
-            printUsage();
+        final File sourceFile = args.length == 2 ? getFile(args[0]) : null;
+        final File targetFile = args.length == 2 ? getFile(args[1]) : null;
+        if (sourceFile != null && targetFile != null) {
+            if (sourceFile.exists() && sourceFile.isFile()) {
+                if (sourceFile.getName().endsWith(CLASS_FILE_EXT) && targetFile.getName().endsWith(CLASS_FILE_EXT)) {
+                    transformClassFile(sourceFile, targetFile);
+                    return;
+                } else if (sourceFile.getName().endsWith(JAR_FILE_EXT) && targetFile.getName().endsWith(JAR_FILE_EXT)) {
+                    transformJarFile(sourceFile, targetFile);
+                    return;
+                }
+            }
+        }
+        printUsage();
+    }
+
+    private static void transformClassFile(final File inClassFile, final File outClassFile) throws IOException {
+        if (inClassFile.length() > Integer.MAX_VALUE) {
+            throw new UnsupportedOperationException("File " + inClassFile.getAbsolutePath() + " too big! Maximum allowed file size is " + Integer.MAX_VALUE + " bytes");
+        }
+
+        final Transformer t = getTransformer();
+        byte[] clazz = new byte[(int)inClassFile.length()];
+        readClassBytes(inClassFile, clazz);
+        clazz = t.transform(clazz);
+        writeClassBytes(outClassFile, clazz);
+    }
+
+    private static void readClassBytes(final File file, final byte[] clazz) throws IOException {
+        try (final FileInputStream fis = new FileInputStream(file)) {
+            int offset = 0;
+            while (offset < clazz.length) {
+                offset += fis.read(clazz, offset, clazz.length - offset);
+            }
         }
     }
 
-    private static void transformClassFile(final String inClassFile, final String outClassFile) throws IOException {
-        final Transformer t = getTransformer();
-        // get original class content
-        final ByteArrayOutputStream targetBAOS = new ByteArrayOutputStream();
-        final Path source = Paths.get(inClassFile);
-        Files.copy(source, targetBAOS);
-        final byte[] sourceBytes = targetBAOS.toByteArray();
-        // transform class
-        final byte[] targetBytes = t.transform(sourceBytes);
-        // write modified class content
-        final ByteArrayInputStream sourceBAIS = new ByteArrayInputStream(targetBytes);
-        final Path target = Paths.get(outClassFile);
-        Files.copy(sourceBAIS, target);
+    private static void writeClassBytes(final File file, final byte[] clazz) throws IOException {
+        try (final FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(clazz);
+        }
     }
 
-    private static void transformJarFile(final String inJarFile, final String outJarFile) throws IOException {
+    private static void transformJarFile(final File inJarFile, final File outJarFile) throws IOException {
         throw new UnsupportedOperationException();
     }
 
@@ -82,9 +97,8 @@ public final class Main {
         return builder.build();
     }
 
-    private static String getFileName(final String arg) {
-        if (arg == null || "".equals(arg)) return "";
-        return arg.replace("\\", "/").replaceAll("//", "/");
+    private static File getFile(final String arg) {
+        return arg == null || "".equals(arg) ? null : new File(arg);
     }
 
     private static void printUsage() {
