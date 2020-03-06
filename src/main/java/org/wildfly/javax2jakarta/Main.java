@@ -21,11 +21,20 @@
  */
 package org.wildfly.javax2jakarta;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.IOException;
+import java.util.Calendar;
+import java.util.Enumeration;
 import java.util.Properties;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarInputStream;
+import java.util.jar.JarOutputStream;
 
 /**
  * Command line tool for transforming class files or jar files.
@@ -66,7 +75,7 @@ public final class Main {
             return false;
         }
         final File sourceFile = new File(args[0]);
-        if (!sourceFile.getName().endsWith(CLASS_FILE_EXT) || sourceFile.getName().endsWith(JAR_FILE_EXT)) {
+        if (!sourceFile.getName().endsWith(CLASS_FILE_EXT) && !sourceFile.getName().endsWith(JAR_FILE_EXT)) {
             System.err.println("Supported file extensions are " + CLASS_FILE_EXT + " or " + JAR_FILE_EXT + " : " + sourceFile.getAbsolutePath());
             return false;
         }
@@ -89,28 +98,73 @@ public final class Main {
 
         final Transformer t = getTransformer();
         byte[] clazz = new byte[(int)inClassFile.length()];
-        readClassBytes(inClassFile, clazz);
-        clazz = t.transform(clazz);
-        writeClassBytes(outClassFile, clazz);
-    }
-
-    private static void readClassBytes(final File file, final byte[] clazz) throws IOException {
-        try (final FileInputStream fis = new FileInputStream(file)) {
-            int offset = 0;
-            while (offset < clazz.length) {
-                offset += fis.read(clazz, offset, clazz.length - offset);
-            }
+        InputStream is = null;
+        OutputStream os = null;
+        try {
+            is = new FileInputStream(inClassFile);
+            readBytes(is, clazz);
+            clazz = t.transform(clazz);
+            os = new FileOutputStream(outClassFile);
+            writeBytes(os, clazz);
+        } finally {
+            safeClose(is);
+            safeClose(os);
         }
     }
 
-    private static void writeClassBytes(final File file, final byte[] clazz) throws IOException {
-        try (final FileOutputStream fos = new FileOutputStream(file)) {
-            fos.write(clazz);
+    private static void safeClose(final Closeable c) {
+        try {
+            if (c != null) c.close();
+        } catch (final Throwable t) {
+            // ignored; TODO: DEBUG
         }
+    }
+
+    private static void readBytes(final InputStream is, final byte[] clazz) throws IOException {
+        int offset = 0;
+        while (offset < clazz.length) {
+            offset += is.read(clazz, offset, clazz.length - offset);
+        }
+    }
+
+    private static void writeBytes(final OutputStream os, final byte[] clazz) throws IOException {
+        os.write(clazz);
     }
 
     private static void transformJarFile(final File inJarFile, final File outJarFile) throws IOException {
-        throw new UnsupportedOperationException();
+        JarOutputStream jos = null;
+        try {
+            final JarFile jar = new JarFile(inJarFile); // TODO: support for multirelease jars
+            jos = new JarOutputStream(new FileOutputStream(outJarFile));
+            JarEntry inJarEntry, outJarEntry;
+            byte[] clazz;
+            Enumeration<JarEntry> e = jar.entries();
+            while (e.hasMoreElements()) {
+                inJarEntry = e.nextElement();
+                if (inJarEntry.getSize() <= 0) continue;
+                if (inJarEntry.getName().endsWith(CLASS_FILE_EXT)) {
+                    clazz = new byte[(int) inJarEntry.getSize()]; // TODO: implement check
+                    readBytes(jar.getInputStream(inJarEntry), clazz);
+                    clazz = getTransformer().transform(clazz);
+                    outJarEntry = new JarEntry(inJarEntry.getName());
+                    outJarEntry.setSize(clazz.length);
+                    outJarEntry.setTime(Calendar.getInstance().getTimeInMillis());
+                    jos.putNextEntry(outJarEntry);
+                    writeBytes(jos, clazz);
+                } else {
+                    clazz = new byte[(int) inJarEntry.getSize()]; // TODO: implement check
+                    readBytes(jar.getInputStream(inJarEntry), clazz);
+                    outJarEntry = new JarEntry(inJarEntry.getName());
+                    outJarEntry.setSize(clazz.length);
+                    outJarEntry.setTime(Calendar.getInstance().getTimeInMillis());
+                    jos.putNextEntry(outJarEntry);
+                    writeBytes(jos, clazz);
+                }
+                jos.closeEntry();
+            }
+        } finally {
+            safeClose(jos);
+        }
     }
 
     private static Transformer getTransformer() throws IOException {
