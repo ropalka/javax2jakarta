@@ -38,20 +38,48 @@ public final class Main {
     private static final String JAR_FILE_EXT = ".jar";
 
     public static void main(final String... args) throws IOException {
-        final File sourceFile = args.length == 2 ? getFile(args[0]) : null;
-        final File targetFile = args.length == 2 ? getFile(args[1]) : null;
-        if (sourceFile != null && targetFile != null) {
-            if (sourceFile.exists() && sourceFile.isFile()) {
-                if (sourceFile.getName().endsWith(CLASS_FILE_EXT) && targetFile.getName().endsWith(CLASS_FILE_EXT)) {
-                    transformClassFile(sourceFile, targetFile);
-                    return;
-                } else if (sourceFile.getName().endsWith(JAR_FILE_EXT) && targetFile.getName().endsWith(JAR_FILE_EXT)) {
-                    transformJarFile(sourceFile, targetFile);
-                    return;
-                }
-            }
+        if (!validParameters(args)) {
+            printUsage();
+            System.exit(1);
         }
-        printUsage();
+
+        final File sourceFile = new File(args[0]);
+        final File targetFile = new File(args[1]);
+        if (sourceFile.getName().endsWith(CLASS_FILE_EXT)) {
+            transformClassFile(sourceFile, targetFile);
+        } else if (sourceFile.getName().endsWith(JAR_FILE_EXT)) {
+            transformJarFile(sourceFile, targetFile);
+        }
+    }
+
+    private static boolean validParameters(final String... args) {
+        if (args.length != 2) {
+            System.err.println("2 arguments required");
+            return false;
+        }
+        if (args[0] == null || args[1] == null) {
+            System.err.println("Argument cannot be null");
+            return false;
+        }
+        if ("".equals(args[0]) || "".equals(args[1])) {
+            System.err.println("Argument cannot be empty string");
+            return false;
+        }
+        final File sourceFile = new File(args[0]);
+        if (!sourceFile.getName().endsWith(CLASS_FILE_EXT) || sourceFile.getName().endsWith(JAR_FILE_EXT)) {
+            System.err.println("Supported file extensions are " + CLASS_FILE_EXT + " or " + JAR_FILE_EXT + " : " + sourceFile.getAbsolutePath());
+            return false;
+        }
+        if (!sourceFile.exists()) {
+            System.err.println("Couldn't find file " + sourceFile.getAbsolutePath());
+            return false;
+        }
+        final File targetFile = new File(args[1]);
+        if (targetFile.exists()) {
+            System.err.println("Delete file or directory " + targetFile.getAbsolutePath());
+            return false;
+        }
+        return true;
     }
 
     private static void transformClassFile(final File inClassFile, final File outClassFile) throws IOException {
@@ -97,16 +125,16 @@ public final class Main {
         return builder.build();
     }
 
-    private static File getFile(final String arg) {
-        return arg == null || "".equals(arg) ? null : new File(arg);
-    }
-
     private static void printUsage() {
-        System.out.println("Usage: " + Main.class.getName() + " source.class target.class");
-        System.out.println("       (to transform a class)");
-        System.out.println("   or  " + Main.class.getName() + " source.jar target.jar");
-        System.out.println("       (to transform a jar file)");
-        System.exit(1);
+        System.err.println();
+        System.err.println("Usage: " + Main.class.getName() + " source.class target.class");
+        System.err.println("       (to transform a class)");
+        System.err.println("   or  " + Main.class.getName() + " source.jar target.jar");
+        System.err.println("       (to transform a jar file)");
+        System.err.println("");
+        System.err.println("Notes:");
+        System.err.println(" * source.class or source.jar must exist");
+        System.err.println(" * target.class or target.jar cannot exist");
     }
 
 }
