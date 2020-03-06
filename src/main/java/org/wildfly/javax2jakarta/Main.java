@@ -116,7 +116,7 @@ public final class Main {
         try {
             if (c != null) c.close();
         } catch (final Throwable t) {
-            // ignored; TODO: DEBUG
+            // ignored
         }
     }
 
@@ -134,32 +134,32 @@ public final class Main {
     private static void transformJarFile(final File inJarFile, final File outJarFile) throws IOException {
         JarOutputStream jos = null;
         try {
-            final JarFile jar = new JarFile(inJarFile); // TODO: support for multirelease jars
+            final JarFile jar = new JarFile(inJarFile);
             jos = new JarOutputStream(new FileOutputStream(outJarFile));
             JarEntry inJarEntry, outJarEntry;
-            byte[] clazz;
+            byte[] buffer;
             Enumeration<JarEntry> e = jar.entries();
+            final Transformer t = getTransformer();
             while (e.hasMoreElements()) {
                 inJarEntry = e.nextElement();
-                if (inJarEntry.getSize() <= 0) continue;
-                if (inJarEntry.getName().endsWith(CLASS_FILE_EXT)) {
-                    clazz = new byte[(int) inJarEntry.getSize()]; // TODO: implement check
-                    readBytes(jar.getInputStream(inJarEntry), clazz);
-                    clazz = getTransformer().transform(clazz);
-                    outJarEntry = new JarEntry(inJarEntry.getName());
-                    outJarEntry.setSize(clazz.length);
-                    outJarEntry.setTime(Calendar.getInstance().getTimeInMillis());
-                    jos.putNextEntry(outJarEntry);
-                    writeBytes(jos, clazz);
-                } else {
-                    clazz = new byte[(int) inJarEntry.getSize()]; // TODO: implement check
-                    readBytes(jar.getInputStream(inJarEntry), clazz);
-                    outJarEntry = new JarEntry(inJarEntry.getName());
-                    outJarEntry.setSize(clazz.length);
-                    outJarEntry.setTime(Calendar.getInstance().getTimeInMillis());
-                    jos.putNextEntry(outJarEntry);
-                    writeBytes(jos, clazz);
+                if (inJarEntry.getSize() == 0) continue;
+                if (inJarEntry.getSize() < 0) {
+                    throw new UnsupportedOperationException("File size " + inJarEntry.getName() + " unknown! File size must be positive number");
                 }
+                if (inJarEntry.getSize() > Integer.MAX_VALUE) {
+                    throw new UnsupportedOperationException("File " + inJarEntry.getName() + " too big! Maximum allowed file size is " + Integer.MAX_VALUE + " bytes");
+                }
+
+                buffer = new byte[(int) inJarEntry.getSize()];
+                readBytes(jar.getInputStream(inJarEntry), buffer);
+                if (inJarEntry.getName().endsWith(CLASS_FILE_EXT)) {
+                    buffer = t.transform(buffer);
+                }
+                outJarEntry = new JarEntry(inJarEntry.getName());
+                outJarEntry.setSize(buffer.length);
+                outJarEntry.setTime(Calendar.getInstance().getTimeInMillis());
+                jos.putNextEntry(outJarEntry);
+                writeBytes(jos, buffer);
                 jos.closeEntry();
             }
         } finally {
