@@ -98,18 +98,9 @@ public final class Main {
 
         final Transformer t = getTransformer();
         byte[] clazz = new byte[(int)inClassFile.length()];
-        InputStream is = null;
-        OutputStream os = null;
-        try {
-            is = new FileInputStream(inClassFile);
-            readBytes(is, clazz);
-            clazz = t.transform(clazz);
-            os = new FileOutputStream(outClassFile);
-            writeBytes(os, clazz);
-        } finally {
-            safeClose(is);
-            safeClose(os);
-        }
+        readBytes(new FileInputStream(inClassFile), clazz, true);
+        clazz = t.transform(clazz);
+        writeBytes(new FileOutputStream(outClassFile), clazz, true);
     }
 
     private static void safeClose(final Closeable c) {
@@ -120,63 +111,90 @@ public final class Main {
         }
     }
 
-    private static void readBytes(final InputStream is, final byte[] clazz) throws IOException {
-        int offset = 0;
-        while (offset < clazz.length) {
-            offset += is.read(clazz, offset, clazz.length - offset);
+    private static void readBytes(final InputStream is, final byte[] clazz, final boolean closeStream) throws IOException {
+        try {
+            int offset = 0;
+            while (offset < clazz.length) {
+                offset += is.read(clazz, offset, clazz.length - offset);
+            }
+        } finally {
+            if (closeStream) {
+                safeClose(is);
+            }
         }
     }
 
-    private static void writeBytes(final OutputStream os, final byte[] clazz) throws IOException {
-        os.write(clazz);
+    private static void writeBytes(final OutputStream os, final byte[] clazz, final boolean closeStream) throws IOException {
+        try {
+            os.write(clazz);
+        } finally {
+            if (closeStream) {
+                safeClose(os);
+            }
+        }
     }
 
     private static void transformJarFile(final File inJarFile, final File outJarFile) throws IOException {
-        JarOutputStream jos = null;
+        final Transformer t = getTransformer();
+        final Calendar calendar = Calendar.getInstance();
+        JarFile jar = null;
+        JarOutputStream jarOutputStream = null;
+        JarEntry inJarEntry, outJarEntry;
+        byte[] buffer;
+
         try {
-            final JarFile jar = new JarFile(inJarFile);
-            jos = new JarOutputStream(new FileOutputStream(outJarFile));
-            JarEntry inJarEntry, outJarEntry;
-            byte[] buffer;
-            Enumeration<JarEntry> e = jar.entries();
-            final Transformer t = getTransformer();
-            while (e.hasMoreElements()) {
+            jar = new JarFile(inJarFile);
+            jarOutputStream = new JarOutputStream(new FileOutputStream(outJarFile));
+
+            for (final Enumeration<JarEntry> e = jar.entries(); e.hasMoreElements(); ) {
+                // jar file entry preconditions
                 inJarEntry = e.nextElement();
-                if (inJarEntry.getSize() == 0) continue;
+                if (inJarEntry.getSize() == 0) {
+                    continue; // directories
+                }
                 if (inJarEntry.getSize() < 0) {
                     throw new UnsupportedOperationException("File size " + inJarEntry.getName() + " unknown! File size must be positive number");
                 }
                 if (inJarEntry.getSize() > Integer.MAX_VALUE) {
                     throw new UnsupportedOperationException("File " + inJarEntry.getName() + " too big! Maximum allowed file size is " + Integer.MAX_VALUE + " bytes");
                 }
-
+                // reading original jar file entry
                 buffer = new byte[(int) inJarEntry.getSize()];
-                readBytes(jar.getInputStream(inJarEntry), buffer);
+                readBytes(jar.getInputStream(inJarEntry), buffer, true);
+                // transform byte code of class files
                 if (inJarEntry.getName().endsWith(CLASS_FILE_EXT)) {
                     buffer = t.transform(buffer);
                 }
+                // writing modified jar file entry
                 outJarEntry = new JarEntry(inJarEntry.getName());
                 outJarEntry.setSize(buffer.length);
-                outJarEntry.setTime(Calendar.getInstance().getTimeInMillis());
-                jos.putNextEntry(outJarEntry);
-                writeBytes(jos, buffer);
-                jos.closeEntry();
+                outJarEntry.setTime(calendar.getTimeInMillis());
+                jarOutputStream.putNextEntry(outJarEntry);
+                writeBytes(jarOutputStream, buffer, false);
+                jarOutputStream.closeEntry();
             }
         } finally {
-            safeClose(jos);
+            safeClose(jar);
+            safeClose(jarOutputStream);
         }
     }
 
     private static Transformer getTransformer() throws IOException {
-        final Properties defaultMapping = new Properties();
-        defaultMapping.load(Transformer.class.getResourceAsStream("/default.mapping"));
-        String to;
-        Transformer.Builder builder = Transformer.newInstance();
-        for (String from : defaultMapping.stringPropertyNames()) {
-            to = defaultMapping.getProperty(from);
-            builder.addMapping(from, to);
+        InputStream is = null;
+        try {
+            is = Transformer.class.getResourceAsStream("/default.mapping");
+            final Properties defaultMapping = new Properties();
+            defaultMapping.load(is);
+            String to;
+            final Transformer.Builder builder = Transformer.newInstance();
+            for (String from : defaultMapping.stringPropertyNames()) {
+                to = defaultMapping.getProperty(from);
+                builder.addMapping(from, to);
+            }
+            return builder.build();
+        } finally {
+            safeClose(is);
         }
-        return builder.build();
     }
 
     private static void printUsage() {
