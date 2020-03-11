@@ -33,7 +33,6 @@ import java.util.Enumeration;
 import java.util.Properties;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
-import java.util.jar.JarInputStream;
 import java.util.jar.JarOutputStream;
 
 /**
@@ -43,8 +42,11 @@ import java.util.jar.JarOutputStream;
  */
 public final class Main {
 
+    private static final String DEFAULT_CONFIG = "default.mapping";
     private static final String CLASS_FILE_EXT = ".class";
     private static final String JAR_FILE_EXT = ".jar";
+    private static final char DOT = '.';
+    private static final char SEP = '/';
 
     public static void main(final String... args) throws IOException {
         if (!validParameters(args)) {
@@ -182,14 +184,20 @@ public final class Main {
     private static Transformer getTransformer() throws IOException {
         InputStream is = null;
         try {
-            is = Transformer.class.getResourceAsStream("/default.mapping");
+            is = Transformer.class.getResourceAsStream(SEP + DEFAULT_CONFIG);
             final Properties defaultMapping = new Properties();
             defaultMapping.load(is);
             String to;
             final Transformer.Builder builder = Transformer.newInstance();
             for (String from : defaultMapping.stringPropertyNames()) {
                 to = defaultMapping.getProperty(from);
+                if (to.indexOf(DOT) != -1 || from.indexOf(DOT) != -1) {
+                    throw new UnsupportedOperationException("Wrong " + DEFAULT_CONFIG + " configuration format");
+                }
                 builder.addMapping(from, to);
+                if (from.indexOf(SEP) != -1 || to.indexOf(SEP) != -1) {
+                    builder.addMapping(from.replace(SEP, DOT), to.replace(SEP, DOT));
+                }
             }
             return builder.build();
         } finally {
